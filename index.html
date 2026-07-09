@@ -1,0 +1,2432 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OBJET STUDIO — 오브젝트 기반 추상 구성 툴</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#17171b;
+    --panel:#1e1e24;
+    --panel-alt:#25252c;
+    --border:#312f39;
+    --border-soft:#28272f;
+    --ink:#ece8de;
+    --ink-dim:#8f8d99;
+    --ink-faint:#5c5a66;
+    --lime:#c6ff3d;
+    --lime-dim:#8fbf2a;
+    --coral:#ff6a4d;
+    --violet:#a48cff;
+    --canvas-bg:#ffffff;
+    --canvas-grid:#dcdcdc;
+    --mono:'IBM Plex Mono', monospace;
+    --display:'Space Grotesk', sans-serif;
+    --body:'IBM Plex Sans KR', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:var(--body);}
+  ::selection{background:var(--lime);color:#111;}
+
+  .app{max-width:1500px;margin:0 auto;padding:28px 28px 60px;}
+
+  /* ---------- topbar ---------- */
+  .topbar{
+    display:flex;align-items:flex-end;justify-content:space-between;
+    border-bottom:1px solid var(--border);padding-bottom:18px;margin-bottom:26px;
+    flex-wrap:wrap;gap:14px;
+  }
+  .brand{display:flex;align-items:center;gap:14px;}
+  .brand-mark{
+    width:40px;height:40px;border:1.5px solid var(--lime);border-radius:3px;
+    display:flex;align-items:center;justify-content:center;color:var(--lime);
+    font-family:var(--display);font-size:18px;flex-shrink:0;
+  }
+  .brand h1{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:0.5px;margin:0;}
+  .brand p{font-family:var(--mono);font-size:12px;color:var(--ink-dim);margin:3px 0 0;}
+  .stat-readout{
+    font-family:var(--mono);font-size:12px;color:var(--ink-dim);
+    border:1px solid var(--border);padding:7px 12px;border-radius:3px;
+    letter-spacing:0.5px;white-space:nowrap;
+  }
+  .stat-readout .dot{color:var(--lime);}
+
+  /* ---------- layout ---------- */
+  .layout{display:grid;grid-template-columns: 1.25fr 1fr 1.05fr;gap:22px;align-items:start;}
+  @media (max-width:1240px){.layout{grid-template-columns:1fr;}}
+
+  .panel{
+    background:var(--panel);border:1px solid var(--border);border-radius:6px;
+    padding:18px;display:flex;flex-direction:column;gap:14px;
+  }
+  .panel-head{display:flex;align-items:center;gap:10px;}
+  .panel-index{
+    font-family:var(--mono);font-size:11px;color:#111;background:var(--lime);
+    width:22px;height:22px;border-radius:3px;display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;font-weight:500;
+  }
+  .objects-panel .panel-index{background:var(--violet);}
+  .comp-panel .panel-index{background:var(--coral);}
+  .panel-head h2{font-family:var(--display);font-size:15px;font-weight:600;margin:0;letter-spacing:0.3px;}
+  .count-badge{
+    margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-dim);
+    border:1px solid var(--border);padding:2px 8px;border-radius:10px;
+  }
+
+  /* ---------- canvas frames ---------- */
+  .canvas-frame{
+    position:relative;width:100%;aspect-ratio:1/1;border:1px solid var(--border-soft);
+    border-radius:4px;overflow:hidden;
+  }
+  .paper-bg{
+    position:absolute;inset:0;background:var(--canvas-bg);
+    background-image:
+      linear-gradient(var(--canvas-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px);
+    background-size:30px 30px;
+  }
+  canvas{display:block;}
+  #drawCanvas{
+    position:absolute;inset:0;width:100%;height:100%;touch-action:none;
+  }
+  
+  #canvasCursor {
+    position:absolute;
+    border:1px solid #000;
+    box-shadow:0 0 0 1px rgba(255,255,255,0.8);
+    border-radius:50%;
+    pointer-events:none;
+    display:none;
+    transform:translate(-50%, -50%);
+    box-sizing:border-box;
+    z-index:10;
+  }
+
+  .comp-frame{background:#0f0f12; position:relative;}
+  #compCanvas{width:100%; height:100%; cursor:default;}
+
+  /* ---------- tool select ---------- */
+  .tool-select{display:flex;gap:6px;align-items:center;}
+  .tool-btn{
+    flex:1;padding:9px 4px;font-family:var(--mono);font-size:11px;
+    border:1px solid var(--border);background:var(--panel-alt);color:var(--ink-dim);
+    border-radius:4px;cursor:pointer;text-align:center;letter-spacing:0.2px;
+  }
+  .tool-btn:hover{color:var(--ink);}
+  .tool-btn.active{background:var(--ink);color:#111;border-color:var(--ink);font-weight:500;}
+  .tool-clear-btn{
+    background:var(--panel-alt);
+    color:var(--coral);
+    border:1px solid var(--border);
+    font-weight:600;
+  }
+  .tool-clear-btn:hover{
+    background:rgba(255,106,77,0.1);
+    border-color:var(--coral);
+  }
+
+  /* ---------- color targets ---------- */
+  .color-targets{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;}
+  .color-target{
+    display:flex;align-items:center;gap:7px;cursor:pointer;padding:6px 9px;
+    border:1px solid var(--border);border-radius:4px;background:var(--panel-alt);flex:1;min-width:120px;
+  }
+  .color-target.active{border-color:var(--lime);}
+  .color-target .swatch-preview{width:20px;height:20px;border-radius:3px;border:1px solid rgba(255,255,255,0.18);flex-shrink:0;}
+  .color-target span{font-family:var(--mono);font-size:11px;color:var(--ink-dim);}
+  .color-target.active span{color:var(--ink);}
+
+  .brush-preview-wrap{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+  .brush-preview{
+    width:38px;height:38px;border:1px solid var(--border);border-radius:4px;
+    background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  #brushPreviewDot{border-radius:50%;background:#1b1b1f;}
+
+  /* ---------- 12 primary colors palette ---------- */
+  .palette-wrap{display:flex;flex-direction:column;gap:6px;}
+  .palette-label{font-family:var(--mono);font-size:10.5px;color:var(--ink-dim);display:flex;justify-content:space-between;gap:8px;}
+  .palette-grid{
+    width:100%;
+    display:grid;grid-template-columns:repeat(12,1fr);gap:4px;
+    background:var(--panel-alt);padding:6px;border-radius:4px;border:1px solid var(--border);
+  }
+  .palette-cell{
+    aspect-ratio:1/1;border-radius:3px;cursor:pointer;
+    border:1px solid rgba(0,0,0,0.2);position:relative;
+  }
+  .palette-cell:hover{outline:1.5px solid var(--ink);outline-offset:1px;z-index:2;}
+  .palette-cell.selected{outline:1.5px solid var(--lime);outline-offset:1px;z-index:2;}
+  .palette-custom{
+    display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--ink-dim);
+  }
+  .palette-custom input[type=color]{
+    width:30px;height:24px;border:1px solid var(--border);border-radius:3px;background:none;padding:0;cursor:pointer;
+  }
+
+  .range-row{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--ink-dim);flex:1;min-width:120px;}
+  input[type=range]{flex:1;accent-color:var(--lime);}
+  .val{min-width:40px;text-align:right;color:var(--ink);}
+
+  .btn{
+    font-family:var(--mono);font-size:12px;padding:9px 14px;border-radius:4px;border:1px solid var(--border);
+    background:var(--panel-alt);color:var(--ink);cursor:pointer;letter-spacing:0.3px;
+    transition:background 0.15s, border-color 0.15s, transform 0.1s;
+  }
+  .btn:hover{border-color:var(--ink-dim);}
+  .btn:active{transform:scale(0.98);}
+  .btn-accent{background:var(--lime);color:#111;border-color:var(--lime);font-weight:500;}
+  .btn-accent:hover{background:var(--lime-dim);}
+  .btn-violet{background:var(--violet);color:#161320;border-color:var(--violet);font-weight:500;}
+  .btn-coral{background:transparent;color:var(--coral);border-color:var(--coral);}
+  .btn-coral:hover{background:rgba(255,106,77,0.1);}
+  .btn-ghost{background:transparent;}
+  .btn-full{width:100%;}
+  .btn-sm{padding:5px 9px;font-size:11px;}
+
+  .checkbox-row{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--ink-dim);}
+  .checkbox-row input{accent-color:var(--lime);}
+  .hint-note{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);line-height:1.5;}
+
+  /* ---------- editors ---------- */
+  .stroke-editor, .comp-item-editor{
+    border-top:1px solid var(--violet);padding-top:14px;display:flex;flex-direction:column;gap:10px;
+    background:rgba(164,140,255,0.06);border-radius:4px;padding:12px;border:1px solid var(--violet);
+  }
+  .comp-item-editor{
+    border-color:var(--coral);
+    background:rgba(255,106,77,0.06);
+  }
+  .stroke-editor h3{font-family:var(--display);font-size:13px;font-weight:600;margin:0;color:var(--violet);}
+  .comp-item-editor h3{font-family:var(--display);font-size:13px;font-weight:600;margin:0;color:var(--coral);}
+  .stroke-editor .btn-row, .comp-item-editor .btn-row{display:flex;gap:8px;}
+  .stroke-editor .btn-row .btn, .comp-item-editor .btn-row .btn{flex:1;}
+
+  /* ---------- object gallery ---------- */
+  .objects-grid{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-height:340px;overflow-y:auto;padding-right:2px;
+  }
+  .objects-grid::-webkit-scrollbar{width:6px;}
+  .objects-grid::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+  .empty-hint{
+    grid-column:1/-1;font-family:var(--mono);font-size:12px;color:var(--ink-faint);
+    text-align:center;padding:30px 10px;border:1px dashed var(--border);border-radius:4px;
+  }
+  .obj-card{
+    border:1px dashed var(--border);border-radius:4px;padding:6px;background:var(--panel-alt);
+    display:flex;flex-direction:column;gap:5px;
+  }
+  .obj-card.selected{border-color:var(--violet);border-style:solid;}
+  .obj-thumb{
+    position:relative;width:100%;aspect-ratio:1/1;border-radius:3px;overflow:hidden;
+    background:#fff;
+    background-image:linear-gradient(var(--canvas-grid) 1px, transparent 1px),linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px);
+    background-size:10px 10px;
+  }
+  .obj-thumb canvas{width:100%;height:100%;object-fit:contain;}
+  .obj-meta{font-family:var(--mono);font-size:9.5px;color:var(--ink-dim);display:flex;justify-content:space-between;}
+  .obj-actions{display:flex;gap:4px;}
+  .obj-actions .btn{flex:1;padding:5px 4px;font-size:10px;text-align:center;}
+
+  /* ---------- variation block ---------- */
+  .variation-block{
+    border-top:1px solid var(--border);padding-top:14px;display:flex;flex-direction:column;gap:10px;
+  }
+  .panel-head-sub h3{font-family:var(--display);font-size:13px;font-weight:600;margin:0;color:var(--violet);}
+  .variations-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  .var-card{
+    background:var(--panel-alt);border:1px solid var(--border);border-radius:4px;padding:5px;
+    display:flex;flex-direction:column;gap:5px;
+  }
+  .var-thumb{
+    width:100%;aspect-ratio:1/1;border-radius:3px;background:#fff;overflow:hidden;
+    background-image:linear-gradient(var(--canvas-grid) 1px, transparent 1px),linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px);
+    background-size:10px 10px;
+  }
+  .var-thumb canvas{width:100%;height:100%;object-fit:contain;}
+  .variation-actions{display:flex;gap:8px;}
+  .variation-actions .btn{flex:1;}
+
+  /* ---------- composition controls ---------- */
+  .comp-controls{display:flex;flex-direction:column;gap:12px;}
+  .comp-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .comp-btns{display:flex;gap:8px;}
+  .comp-btns .btn{flex:1;}
+  .bg-swatches{display:flex;gap:6px;align-items:center;}
+  .swatch{
+    width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;
+    box-shadow:0 0 0 1px var(--border-soft);
+  }
+  .swatch.active{border-color:var(--ink);}
+  .swatch-custom{position:relative;overflow:hidden;}
+  .swatch-custom input[type=color]{
+    position:absolute;top:-4px;left:-4px;width:36px;height:36px;border:none;padding:0;cursor:pointer;
+  }
+  .label-mono{font-family:var(--mono);font-size:11px;color:var(--ink-dim);min-width:74px;}
+
+  footer{
+    margin-top:30px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--ink-faint);
+  }
+
+  .toast{
+    position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--panel-alt);border:1px solid var(--border);color:var(--ink);
+    font-family:var(--mono);font-size:12px;padding:10px 16px;border-radius:5px;
+    opacity:0;transition:opacity 0.25s, transform 0.25s;pointer-events:none;z-index:50;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  /* ---------- folder / IO chip ---------- */
+  .folder-chip{
+    display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;
+    color:var(--ink-dim);border:1px solid var(--border);padding:6px 10px;border-radius:4px;
+    background:var(--panel-alt);flex-wrap:wrap;
+  }
+  .folder-chip .folder-status{color:var(--ink);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .folder-chip.connected{border-color:var(--lime);}
+  .folder-chip .link-btn{
+    background:transparent;border:1px solid var(--border);color:var(--ink);
+    font-family:var(--mono);font-size:10.5px;padding:4px 8px;border-radius:3px;cursor:pointer;
+  }
+  .folder-chip .link-btn:hover{border-color:var(--lime);color:var(--lime);}
+  .folder-chip .link-btn.violet:hover{border-color:var(--violet);color:var(--violet);}
+
+  /* ---------- IO controls in samples panel ---------- */
+  .io-controls{
+    display:flex;flex-direction:column;gap:8px;
+    background:rgba(164,140,255,0.04);border:1px dashed var(--border);
+    border-radius:4px;padding:10px;
+  }
+  .io-controls-row{display:flex;gap:6px;flex-wrap:wrap;}
+  .io-controls-row .btn{flex:1;min-width:100px;}
+  .io-hint{font-family:var(--mono);font-size:10px;color:var(--ink-faint);line-height:1.5;margin:0;}
+  .io-hint code{color:var(--lime);background:rgba(198,255,61,0.08);padding:1px 4px;border-radius:2px;}
+
+  /* ---------- drop overlay (panel highlight during drag) ---------- */
+  .drop-target{position:relative;}
+  .drop-target.drag-over::after{
+    content:'PNG 파일을 여기에 드롭하세요';
+    position:absolute;inset:0;
+    background:rgba(164,140,255,0.15);
+    border:2px dashed var(--violet);
+    border-radius:6px;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:14px;color:var(--violet);letter-spacing:0.5px;
+    pointer-events:none;z-index:20;
+    backdrop-filter:blur(2px);
+  }
+
+  /* ---------- GitHub modal ---------- */
+  .modal-backdrop{
+    position:fixed;inset:0;background:rgba(10,10,14,0.72);backdrop-filter:blur(4px);
+    display:none;align-items:center;justify-content:center;z-index:100;padding:20px;
+  }
+  .modal-backdrop.show{display:flex;}
+  .modal{
+    background:var(--panel);border:1px solid var(--border);border-radius:8px;
+    padding:24px;max-width:520px;width:100%;max-height:85vh;overflow-y:auto;
+    display:flex;flex-direction:column;gap:14px;
+  }
+  .modal h2{font-family:var(--display);font-size:18px;font-weight:600;margin:0;letter-spacing:0.3px;}
+  .modal p.hint{font-family:var(--mono);font-size:11px;color:var(--ink-dim);line-height:1.6;margin:0;}
+  .modal .field{display:flex;flex-direction:column;gap:5px;}
+  .modal .field label{font-family:var(--mono);font-size:11px;color:var(--ink-dim);letter-spacing:0.3px;}
+  .modal .field input{
+    background:var(--panel-alt);border:1px solid var(--border);color:var(--ink);
+    font-family:var(--mono);font-size:12px;padding:9px 11px;border-radius:4px;outline:none;
+  }
+  .modal .field input:focus{border-color:var(--lime);}
+  .modal .field .sub{font-family:var(--mono);font-size:10px;color:var(--ink-faint);line-height:1.5;}
+  .modal .modal-btns{display:flex;gap:8px;margin-top:6px;}
+  .modal .modal-btns .btn{flex:1;}
+  .modal a{color:var(--lime);text-decoration:none;}
+  .modal a:hover{text-decoration:underline;}
+  .modal .warn-box{
+    border:1px solid var(--coral);background:rgba(255,106,77,0.06);
+    padding:10px 12px;border-radius:4px;font-family:var(--mono);font-size:10.5px;
+    color:var(--coral);line-height:1.55;
+  }
+
+  .folder-chip.gh-connected{border-color:var(--violet);}
+  .folder-chip .gh-status{color:var(--violet);}
+  .archive-link{
+    font-family:var(--mono);font-size:11px;color:var(--ink-dim);
+    border:1px solid var(--border);padding:7px 12px;border-radius:3px;
+    text-decoration:none;letter-spacing:0.3px;
+  }
+  .archive-link:hover{border-color:var(--lime);color:var(--lime);}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">◇</div>
+      <div>
+        <h1>OBJET STUDIO</h1>
+        <p>그리면 표본이 되고, 표본은 자유로운 다층 구성이 됩니다 — 1080 × 1080</p>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <div class="folder-chip" id="folderChip">
+        <span>로컬 폴더:</span>
+        <span class="folder-status" id="folderStatus">미연결 (다운로드로 저장)</span>
+        <button class="link-btn" id="connectFolderBtn">연결</button>
+      </div>
+      <div class="folder-chip" id="ghChip">
+        <span>GitHub:</span>
+        <span class="folder-status gh-status" id="ghStatus">미연결</span>
+        <button class="link-btn violet" id="connectGhBtn">설정</button>
+      </div>
+      <a class="archive-link" href="archive.html" target="_blank">아카이브 →</a>
+      <div class="stat-readout"><span class="dot">●</span> <span id="statReadout">OBJ 0000 · READY</span></div>
+    </div>
+  </div>
+
+  <div class="layout">
+
+    <section class="panel draw-panel">
+      <div class="panel-head"><span class="panel-index">01</span><h2>드로잉</h2></div>
+
+      <div class="canvas-frame">
+        <div class="paper-bg"></div>
+        <canvas id="drawCanvas" width="1080" height="1080"></canvas>
+        <div id="canvasCursor"></div>
+      </div>
+
+      <div class="tool-select">
+        <button class="tool-btn active" data-tool="brush">✎ 브러시</button>
+        <button class="tool-btn" data-tool="fill">▨ 채우기</button>
+        <button class="tool-btn" data-tool="eraser">▢ 지우개</button>
+        <button class="tool-btn" data-tool="select">◈ 편집</button>
+        <button class="tool-btn tool-clear-btn" id="clearDrawBtn">초기화</button>
+      </div>
+
+      <div class="history-select" style="display:flex; gap:6px; margin-top:-4px;">
+        <button class="tool-btn" id="undoBtn">↶ 되돌리기</button>
+        <button class="tool-btn" id="redoBtn">↷ 앞으로 돌리기</button>
+      </div>
+
+      <div class="color-targets">
+        <div class="color-target active" id="strokeTarget">
+          <div class="swatch-preview" id="strokeSwatchPreview" style="background:#1b1b1f"></div>
+          <span>선 색상</span>
+        </div>
+        <div class="color-target" id="fillTarget">
+          <div class="swatch-preview" id="fillSwatchPreview" style="background:#ff5500"></div>
+          <span>채우기 색상</span>
+        </div>
+        <div class="brush-preview-wrap">
+          <div class="brush-preview"><div id="brushPreviewDot" style="width:8px;height:8px;"></div></div>
+        </div>
+      </div>
+
+      <div class="palette-wrap">
+        <div class="palette-label"><span>주요 12색 고채도 팔레트</span><span id="paletteTargetLabel">선 색상 편집 중</span></div>
+        <div class="palette-grid" id="paletteGrid"></div>
+        <div class="palette-custom">
+          <span>커스텀 컬러</span>
+          <input type="color" id="customColorPicker" value="#1b1b1f">
+        </div>
+      </div>
+
+      <div class="tool-row" style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div class="range-row">
+          <span>굵기</span>
+          <input type="range" id="brushSize" min="1" max="60" value="8">
+          <span class="val" id="brushSizeVal">8</span>
+        </div>
+      </div>
+
+      <div class="tool-row" id="toleranceRow" style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div class="range-row">
+          <span>허용오차</span>
+          <input type="range" id="tolerance" min="0" max="120" value="32">
+          <span class="val" id="toleranceVal">32</span>
+        </div>
+      </div>
+
+      <div class="stroke-editor" id="strokeEditor" hidden>
+        <h3>선택된 선 편집</h3>
+        <div class="color-target active" id="selStrokeColorRow" style="cursor:default;">
+          <div class="swatch-preview" id="selStrokeColorPreview" style="background:#1b1b1f"></div>
+          <span>이 선의 색상 — 위 팔레트에서 클릭해 변경</span>
+        </div>
+        <div class="range-row">
+          <span>이 선의 굵기</span>
+          <input type="range" id="selStrokeWidth" min="1" max="60" value="8">
+          <span class="val" id="selStrokeWidthVal">8</span>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" id="deselectStrokeBtn">선택 해제</button>
+          <button class="btn btn-coral" id="deleteStrokeBtn">이 선 삭제</button>
+        </div>
+      </div>
+
+      <p class="hint-note">편집(◈) 툴로 선을 클릭하면 그린 후에도 개별 선의 색상과 굵기를 언제든 변경할 수 있습니다.</p>
+
+      <label class="checkbox-row">
+        <input type="checkbox" id="keepAfterRegister">
+        등록 후에도 드로잉 유지하기 (이어서 그리기)
+      </label>
+
+      <button class="btn btn-accent btn-full" id="registerBtn">오브젝트로 등록 →</button>
+    </section>
+
+    <section class="panel objects-panel drop-target" id="samplesPanel">
+      <div class="panel-head"><span class="panel-index">02</span><h2>표본 보관함</h2><span class="count-badge" id="objCount">0개</span></div>
+
+      <div class="io-controls">
+        <div class="io-controls-row">
+          <button class="btn btn-sm" id="openFilesBtn">📂 파일 열기</button>
+          <button class="btn btn-sm" id="loadFolderBtn">🗂️ 폴더에서 불러오기</button>
+        </div>
+        <p class="io-hint">PNG 파일을 끌어다 이 패널에 놓아 표본으로 추가할 수 있습니다.<br>등록된 오브젝트는 <code>연결폴더/YYYY-MM-DD/</code> 아래에 자동 저장됩니다.</p>
+        <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" multiple hidden>
+      </div>
+
+      <div class="objects-grid" id="objectsGrid">
+        <p class="empty-hint">아직 등록된 오브젝트가 없습니다.<br>왼쪽에서 그림을 그리고 등록해보세요.</p>
+      </div>
+
+      <div class="variation-block" id="variationBlock" hidden>
+        <div class="panel-head-sub"><h3>고다양성 선형 추적 베리에이션 — <span id="varTargetLabel"></span></h3></div>
+        <p class="hint-note">선 형태와 방향성 알고리즘을 크게 확장하여 원본의 의도를 파괴하지 않으면서 과감하고 다채로운 변주를 일으킵니다.</p>
+        <div class="variations-grid" id="variationsGrid"></div>
+        <div class="variation-actions">
+          <button class="btn btn-ghost" id="regenVarBtn">다시 생성</button>
+          <button class="btn btn-violet" id="addAllVarBtn">전체를 표본으로 추가</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel comp-panel">
+      <div class="panel-head"><span class="panel-index">03</span><h2>구성</h2></div>
+
+      <div class="canvas-frame comp-frame">
+        <canvas id="compCanvas" width="1080" height="1080"></canvas>
+      </div>
+
+      <div class="comp-item-editor" id="compItemEditor" hidden>
+        <h3>선택된 배치 요소 조절</h3>
+        <p class="hint-note" style="color:var(--coral); margin-top:0;">* 이미지 본체를 마우스로 드래그하면 원하는 위치로 자유롭게 이동시킬 수 있습니다.</p>
+        <div class="range-row">
+          <span>개별 크기</span>
+          <input type="range" id="itemScale" min="10" max="400" value="100">
+          <span class="val" id="itemScaleVal">1.0x</span>
+        </div>
+        <div class="range-row">
+          <span>개별 회전</span>
+          <input type="range" id="itemAngle" min="0" max="360" value="0">
+          <span class="val" id="itemAngleVal">0°</span>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" id="sendForwardBtn">맨 앞으로</button>
+          <button class="btn btn-ghost" id="sendBackwardBtn">맨 뒤로</button>
+          <button class="btn btn-coral" id="deleteItemBtn">이 요소 삭제</button>
+        </div>
+      </div>
+
+      <div class="comp-controls">
+        <div class="comp-row">
+          <span class="label-mono">배치 개수</span>
+          <input type="range" id="compCount" min="1" max="60" value="14" style="flex:1;accent-color:var(--coral);">
+          <span class="val" id="compCountVal">14</span>
+        </div>
+        <div class="comp-row">
+          <span class="label-mono">기본 크기범위</span>
+          <input type="range" id="scaleMin" min="10" max="300" value="40" style="flex:1;accent-color:var(--coral);">
+          <input type="range" id="scaleMax" min="10" max="300" value="160" style="flex:1;accent-color:var(--coral);">
+          <span class="val" id="scaleRangeVal" style="width:70px;">0.4–1.6x</span>
+        </div>
+        <div class="comp-row">
+          <span class="label-mono">배경 설정</span>
+          <div class="bg-swatches" id="bgSwatches">
+            <div class="swatch active" data-bg="#0f0f12" style="background:#0f0f12"></div>
+            <div class="swatch" data-bg="#ffffff" style="background:#ffffff"></div>
+            <div class="swatch" data-bg="#efe9db" style="background:#efe9db"></div>
+            <div class="swatch" data-bg="#1b1b1f" style="background:#1b1b1f"></div>
+            <div class="swatch swatch-custom" style="background:conic-gradient(red,yellow,lime,cyan,blue,magenta,red)">
+              <input type="color" id="customBg" value="#0f0f12">
+            </div>
+          </div>
+        </div>
+        <div class="comp-btns">
+          <button class="btn btn-coral" id="genCompBtn">랜덤 구성 생성 (실시간 중첩) ✦</button>
+          <button class="btn" id="clearCompBtn">모두 지우기</button>
+          <button class="btn" id="downloadCompBtn">PNG 저장</button>
+        </div>
+        <p class="hint-note">팁: 구성 화면 안의 요소를 마우스로 선택 후 자유롭게 드래그하여 배치 구조를 직접 다층 조절할 수 있습니다.</p>
+      </div>
+    </section>
+
+  </div>
+
+  <footer>로컬 메모리 구동 · 새로고침하면 임시 표본이 초기화됩니다</footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-backdrop" id="ghModal">
+  <div class="modal">
+    <h2>GitHub 저장소 연결</h2>
+    <p class="hint">등록한 오브젝트 PNG를 GitHub 저장소로 자동 커밋합니다.<br>아카이브 페이지는 이 저장소를 읽어 그림들을 랜덤 콜라주로 표시합니다.</p>
+
+    <div class="field">
+      <label>소유자 (Owner)</label>
+      <input type="text" id="ghOwner" placeholder="예: myusername" autocomplete="off">
+      <span class="sub">GitHub 사용자명 또는 조직명</span>
+    </div>
+
+    <div class="field">
+      <label>저장소 이름 (Repository)</label>
+      <input type="text" id="ghRepo" placeholder="예: objet-studio" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label>브랜치 (Branch)</label>
+      <input type="text" id="ghBranch" placeholder="main" value="main" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label>저장 경로 (Path prefix)</label>
+      <input type="text" id="ghPath" placeholder="gallery" value="gallery" autocomplete="off">
+      <span class="sub">이 폴더 아래 <code style="color:var(--lime);">YYYY-MM-DD/pattern_*.png</code> 형태로 저장됩니다.</span>
+    </div>
+
+    <div class="field">
+      <label>Personal Access Token (PAT)</label>
+      <input type="password" id="ghToken" placeholder="ghp_..." autocomplete="off">
+      <span class="sub">
+        <a href="https://github.com/settings/tokens?type=beta" target="_blank">GitHub Fine-grained token</a>을 발급받아 해당 저장소의 <b>Contents: Read and write</b> 권한을 부여하세요.
+      </span>
+    </div>
+
+    <div class="warn-box">
+      ⚠ 토큰은 이 브라우저의 localStorage에만 저장되며 서버로 전송되지 않습니다. 그러나 브라우저를 다른 사람과 공유하지 마세요. 공용 컴퓨터에서 사용했다면 반드시 [연결 해제] 후 종료하세요.
+    </div>
+
+    <div class="modal-btns">
+      <button class="btn btn-ghost" id="ghModalCancel">취소</button>
+      <button class="btn btn-coral" id="ghModalDisconnect">연결 해제</button>
+      <button class="btn btn-violet" id="ghModalSave">저장 & 연결 테스트</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------------- state ----------------
+  const actions = [];   
+  const redoStack = []; // Undo/Redo 기록 관리를 위한 가상 스택 스토리지
+  const objects = [];        
+  let objCounter = 0;
+  let currentVarTarget = null;
+  let variationsCache = [];
+
+  // Composition interactive layout state
+  const placedItems = []; 
+  let selectedItemIdx = null;
+  let isDraggingItem = false;
+  let dragStartMouse = { x: 0, y: 0 };
+  let dragStartItemPos = { x: 0, y: 0 };
+
+  // ---------------- helpers ----------------
+  const $ = id => document.getElementById(id);
+  const rand = (a,b) => a + Math.random()*(b-a);
+
+  function toast(msg){
+    const el = $('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(()=> el.classList.remove('show'), 2400);
+  }
+
+  // ==================== FOLDER I/O STATE & UTILS ====================
+  // File System Access API 지원 브라우저에서 사용자가 선택한 디렉토리 핸들
+  // (Chrome, Edge, Opera 등에서만 지원. Firefox/Safari 에서는 다운로드로 폴백)
+  let baseDirHandle = null;
+  const hasFSAccess = typeof window.showDirectoryPicker === 'function';
+
+  function pad2(n){ return String(n).padStart(2,'0'); }
+  function todayFolderName(d){
+    d = d || new Date();
+    return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+  }
+  function timeStamp(d){
+    d = d || new Date();
+    return `${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`;
+  }
+  function canvasToBlob(canvas){
+    return new Promise((resolve, reject)=>{
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png');
+    });
+  }
+  function updateFolderChip(){
+    const chip = $('folderChip');
+    const status = $('folderStatus');
+    if(baseDirHandle){
+      chip.classList.add('connected');
+      status.textContent = `${baseDirHandle.name} / ${todayFolderName()}/`;
+    } else {
+      chip.classList.remove('connected');
+      status.textContent = hasFSAccess ? '미연결 (다운로드로 저장)' : '브라우저 미지원 → 다운로드 저장';
+    }
+  }
+
+  async function connectFolder(){
+    if(!hasFSAccess){
+      toast('이 브라우저는 폴더 연결을 지원하지 않습니다. 저장은 다운로드로 이루어집니다.');
+      return;
+    }
+    try {
+      baseDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      // 쓰기 권한 확인
+      const perm = await baseDirHandle.queryPermission({ mode: 'readwrite' });
+      if(perm !== 'granted'){
+        const req = await baseDirHandle.requestPermission({ mode: 'readwrite' });
+        if(req !== 'granted'){
+          baseDirHandle = null;
+          toast('폴더 쓰기 권한이 거부되었습니다.');
+          updateFolderChip();
+          return;
+        }
+      }
+      toast(`저장 폴더 연결: ${baseDirHandle.name}`);
+      updateFolderChip();
+    } catch(e){
+      if(e.name !== 'AbortError') console.error(e);
+    }
+  }
+
+  // 다운로드 폴백 — 브라우저 다운로드 폴더로 저장 (a[download]는 하위 폴더 생성 불가)
+  function saveViaDownload(canvas, filename){
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = canvas.toDataURL('image/png');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  // ==================== GITHUB CONFIG & COMMIT ====================
+  // 사용자의 GitHub 저장소로 PNG를 자동 커밋. 설정은 localStorage에 보관.
+  const GH_STORAGE_KEY = 'objet_studio_gh_config';
+  let ghConfig = null;
+
+  function loadGhConfig(){
+    try {
+      const raw = localStorage.getItem(GH_STORAGE_KEY);
+      ghConfig = raw ? JSON.parse(raw) : null;
+    } catch(e){ ghConfig = null; }
+    updateGhChip();
+  }
+  function saveGhConfig(cfg){
+    ghConfig = cfg;
+    localStorage.setItem(GH_STORAGE_KEY, JSON.stringify(cfg));
+    updateGhChip();
+  }
+  function clearGhConfig(){
+    ghConfig = null;
+    localStorage.removeItem(GH_STORAGE_KEY);
+    updateGhChip();
+  }
+  function updateGhChip(){
+    const chip = $('ghChip');
+    const status = $('ghStatus');
+    if(ghConfig && ghConfig.owner && ghConfig.repo){
+      chip.classList.add('gh-connected');
+      status.textContent = `${ghConfig.owner}/${ghConfig.repo}`;
+    } else {
+      chip.classList.remove('gh-connected');
+      status.textContent = '미연결';
+    }
+  }
+
+  // Blob → base64 (fetch → readAsDataURL 파이프라인)
+  function blobToBase64(blob){
+    return new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const s = reader.result;
+        const idx = s.indexOf(',');
+        resolve(idx >= 0 ? s.slice(idx+1) : s);
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  // GitHub Contents API로 파일 커밋 (PUT /repos/{owner}/{repo}/contents/{path})
+  async function commitToGitHub(canvas, filename, dateFolder){
+    if(!ghConfig || !ghConfig.token) throw new Error('GitHub 설정이 없습니다.');
+    const { owner, repo, branch, path, token } = ghConfig;
+    const pathPrefix = (path || 'gallery').replace(/^\/+|\/+$/g,'');
+    const fullPath = `${pathPrefix}/${dateFolder}/${filename}`;
+    const blob = await canvasToBlob(canvas);
+    const base64 = await blobToBase64(blob);
+
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURI(fullPath)}`;
+    const body = {
+      message: `Add ${filename}`,
+      content: base64,
+      branch: branch || 'main'
+    };
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Accept': 'application/vnd.github+json',
+        'Authorization': `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      throw new Error(`GitHub 커밋 실패 (${res.status}): ${err.message || res.statusText}`);
+    }
+    return fullPath;
+  }
+
+  // 저장소 접근 테스트 (Get repo metadata)
+  async function testGitHubAccess(cfg){
+    const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}`;
+    const res = await fetch(url, {
+      headers: {
+        'Accept': 'application/vnd.github+json',
+        'Authorization': `Bearer ${cfg.token}`,
+        'X-GitHub-Api-Version': '2022-11-28'
+      }
+    });
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      throw new Error(`저장소 확인 실패 (${res.status}): ${err.message || res.statusText}`);
+    }
+    return await res.json();
+  }
+  // ==================== END GITHUB ====================
+
+  // 등록된 오브젝트 캔버스를 저장 (로컬 폴더 + GitHub 저장소로 동시 저장)
+  async function savePatternToFolder(canvas, objId){
+    const now = new Date();
+    const dateFolder = todayFolderName(now);
+    const filename = `pattern_${dateFolder}_${timeStamp(now)}_OBJ-${pad2(objId)}.png`;
+
+    const results = [];
+
+    // 1) 로컬 저장 (폴더 연결됨 → 파일시스템, 아니면 다운로드)
+    if(baseDirHandle){
+      try {
+        const dirHandle = await baseDirHandle.getDirectoryHandle(dateFolder, { create: true });
+        const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+        const writable = await fileHandle.createWritable();
+        const blob = await canvasToBlob(canvas);
+        await writable.write(blob);
+        await writable.close();
+        results.push(`로컬: ${dateFolder}/`);
+      } catch(e){
+        console.error(e);
+        results.push(`로컬 실패`);
+      }
+    } else if(!ghConfig){
+      // 로컬도 없고 GitHub도 없으면 다운로드로 폴백
+      saveViaDownload(canvas, filename);
+      results.push(`다운로드: ${filename}`);
+    }
+
+    // 2) GitHub 저장소 커밋 (연결된 경우)
+    if(ghConfig && ghConfig.token){
+      try {
+        const path = await commitToGitHub(canvas, filename, dateFolder);
+        results.push(`GitHub: ${path}`);
+      } catch(e){
+        console.error(e);
+        results.push(`GitHub 실패: ${e.message}`);
+      }
+    }
+
+    toast(results.join(' · '));
+    updateFolderChip();
+  }
+
+  // 이미지 파일들을 표본 보관함으로 로드
+  function loadImageFile(file){
+    return new Promise((resolve, reject)=>{
+      if(!file.type.startsWith('image/')){ resolve(null); return; }
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = img.width; c.height = img.height;
+        const cx = c.getContext('2d');
+        cx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+        // 이미 오브젝트만 담긴 파일이지만, 안전을 위해 알파 기준 bbox 재크롭
+        const bbox = getBBox(c);
+        const finalC = bbox ? cropCanvas(c, bbox) : c;
+        addObject(finalC, null);
+        resolve(finalC);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('이미지 로드 실패: '+file.name)); };
+      img.src = url;
+    });
+  }
+
+  async function loadImagesFromFileList(files){
+    const arr = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if(arr.length === 0){
+      toast('이미지 파일을 찾을 수 없습니다.');
+      return;
+    }
+    let ok = 0;
+    for(const f of arr){
+      try { await loadImageFile(f); ok++; } catch(e){ console.error(e); }
+    }
+    toast(`${ok}개 표본을 불러왔습니다.`);
+  }
+
+  // 연결된 폴더에서 특정 날짜(기본: 오늘) 하위 이미지를 모두 불러오기
+  async function loadImagesFromConnectedFolder(){
+    if(!baseDirHandle){
+      toast('먼저 저장 폴더를 연결해주세요.');
+      return;
+    }
+    // 사용 가능한 날짜 폴더 목록 수집
+    const dateFolders = [];
+    for await (const entry of baseDirHandle.values()){
+      if(entry.kind === 'directory' && /^\d{4}-\d{2}-\d{2}$/.test(entry.name)){
+        dateFolders.push(entry.name);
+      }
+    }
+    if(dateFolders.length === 0){
+      toast('연결된 폴더에 날짜 하위 폴더(YYYY-MM-DD)가 없습니다.');
+      return;
+    }
+    dateFolders.sort().reverse(); // 최신순
+    const today = todayFolderName();
+    const target = dateFolders.includes(today)
+      ? today
+      : prompt(`불러올 날짜 폴더를 선택하세요:\n${dateFolders.join(', ')}`, dateFolders[0]);
+    if(!target || !dateFolders.includes(target)){
+      toast('취소되었습니다.');
+      return;
+    }
+    const dirHandle = await baseDirHandle.getDirectoryHandle(target);
+    const files = [];
+    for await (const entry of dirHandle.values()){
+      if(entry.kind === 'file' && /\.(png|jpe?g|webp)$/i.test(entry.name)){
+        files.push(await entry.getFile());
+      }
+    }
+    if(files.length === 0){
+      toast(`${target} 폴더에 이미지가 없습니다.`);
+      return;
+    }
+    await loadImagesFromFileList(files);
+  }
+
+  // ---- 이벤트 바인딩: 폴더 연결 / 파일 열기 / 폴더 불러오기 ----
+  $('connectFolderBtn').addEventListener('click', connectFolder);
+  $('openFilesBtn').addEventListener('click', ()=> $('fileInput').click());
+  $('fileInput').addEventListener('change', async (e)=>{
+    if(e.target.files && e.target.files.length){
+      await loadImagesFromFileList(e.target.files);
+      e.target.value = '';
+    }
+  });
+  $('loadFolderBtn').addEventListener('click', async ()=>{
+    if(!hasFSAccess){
+      toast('폴더 불러오기는 이 브라우저에서 지원되지 않습니다. "파일 열기"를 사용해주세요.');
+      return;
+    }
+    if(!baseDirHandle){
+      // 폴더 연결이 안 되어 있으면 이번에만 임시로 폴더 선택
+      try {
+        const dir = await window.showDirectoryPicker({ mode: 'read' });
+        const files = [];
+        for await (const entry of dir.values()){
+          if(entry.kind === 'file' && /\.(png|jpe?g|webp)$/i.test(entry.name)){
+            files.push(await entry.getFile());
+          } else if(entry.kind === 'directory' && /^\d{4}-\d{2}-\d{2}$/.test(entry.name)){
+            // 날짜 하위 폴더 안의 파일도 재귀 한 단계
+            for await (const sub of entry.values()){
+              if(sub.kind === 'file' && /\.(png|jpe?g|webp)$/i.test(sub.name)){
+                files.push(await sub.getFile());
+              }
+            }
+          }
+        }
+        if(files.length === 0){ toast('폴더에 이미지가 없습니다.'); return; }
+        await loadImagesFromFileList(files);
+      } catch(e){ if(e.name !== 'AbortError') console.error(e); }
+      return;
+    }
+    await loadImagesFromConnectedFolder();
+  });
+
+  // ---- 드래그 & 드롭: 표본 보관함 패널 전체가 드롭 타겟 ----
+  (function setupDragDrop(){
+    const zone = $('samplesPanel');
+    let depth = 0;
+    ['dragenter','dragover'].forEach(evt=>{
+      zone.addEventListener(evt, e=>{
+        e.preventDefault();
+        e.stopPropagation();
+        if(e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      });
+    });
+    zone.addEventListener('dragenter', ()=>{ depth++; zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', ()=>{ depth = Math.max(0, depth-1); if(depth===0) zone.classList.remove('drag-over'); });
+    zone.addEventListener('drop', async e=>{
+      e.preventDefault();
+      e.stopPropagation();
+      depth = 0;
+      zone.classList.remove('drag-over');
+      // items 를 통해 폴더 드롭도 지원 (webkitGetAsEntry)
+      const files = [];
+      if(e.dataTransfer.items && e.dataTransfer.items.length){
+        const promises = [];
+        for(const item of e.dataTransfer.items){
+          const entry = item.webkitGetAsEntry && item.webkitGetAsEntry();
+          if(entry){
+            promises.push(collectEntry(entry, files));
+          } else {
+            const f = item.getAsFile();
+            if(f) files.push(f);
+          }
+        }
+        await Promise.all(promises);
+      } else if(e.dataTransfer.files){
+        for(const f of e.dataTransfer.files) files.push(f);
+      }
+      if(files.length === 0){ toast('이미지 파일을 찾을 수 없습니다.'); return; }
+      await loadImagesFromFileList(files);
+    });
+
+    // 폴더/파일 재귀 수집 (드롭한 폴더 안의 모든 이미지 추출)
+    function collectEntry(entry, files){
+      return new Promise(resolve=>{
+        if(entry.isFile){
+          entry.file(f => { files.push(f); resolve(); }, ()=> resolve());
+        } else if(entry.isDirectory){
+          const reader = entry.createReader();
+          const readAll = (allEntries=[]) => {
+            reader.readEntries(async entries=>{
+              if(entries.length === 0){
+                await Promise.all(allEntries.map(en => collectEntry(en, files)));
+                resolve();
+              } else {
+                allEntries.push(...entries);
+                readAll(allEntries);
+              }
+            }, ()=> resolve());
+          };
+          readAll();
+        } else resolve();
+      });
+    }
+
+    // 브라우저 창 전체 밖에서의 파일 드롭이 페이지에서 열리는 것 방지
+    ['dragover','drop'].forEach(evt=>{
+      window.addEventListener(evt, e=>{
+        if(!zone.contains(e.target)){
+          e.preventDefault();
+        }
+      });
+    });
+  })();
+
+  updateFolderChip();
+
+  // ==================== GITHUB MODAL EVENTS ====================
+  loadGhConfig();
+
+  function openGhModal(){
+    const m = $('ghModal');
+    if(ghConfig){
+      $('ghOwner').value  = ghConfig.owner  || '';
+      $('ghRepo').value   = ghConfig.repo   || '';
+      $('ghBranch').value = ghConfig.branch || 'main';
+      $('ghPath').value   = ghConfig.path   || 'gallery';
+      $('ghToken').value  = ghConfig.token  || '';
+    }
+    m.classList.add('show');
+  }
+  function closeGhModal(){ $('ghModal').classList.remove('show'); }
+
+  $('connectGhBtn').addEventListener('click', openGhModal);
+  $('ghModalCancel').addEventListener('click', closeGhModal);
+  $('ghModal').addEventListener('click', e => { if(e.target === $('ghModal')) closeGhModal(); });
+
+  $('ghModalDisconnect').addEventListener('click', ()=>{
+    clearGhConfig();
+    $('ghOwner').value = ''; $('ghRepo').value = '';
+    $('ghBranch').value = 'main'; $('ghPath').value = 'gallery';
+    $('ghToken').value = '';
+    toast('GitHub 연결이 해제되었습니다.');
+    closeGhModal();
+  });
+
+  $('ghModalSave').addEventListener('click', async ()=>{
+    const cfg = {
+      owner:  $('ghOwner').value.trim(),
+      repo:   $('ghRepo').value.trim(),
+      branch: $('ghBranch').value.trim() || 'main',
+      path:   $('ghPath').value.trim()   || 'gallery',
+      token:  $('ghToken').value.trim(),
+    };
+    if(!cfg.owner || !cfg.repo || !cfg.token){
+      toast('소유자·저장소·토큰은 필수입니다.');
+      return;
+    }
+    const btn = $('ghModalSave');
+    btn.disabled = true; btn.textContent = '확인 중…';
+    try {
+      const info = await testGitHubAccess(cfg);
+      saveGhConfig(cfg);
+      toast(`연결 성공: ${info.full_name} (${info.private ? '비공개' : '공개'})`);
+      closeGhModal();
+    } catch(e){
+      toast(e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '저장 & 연결 테스트';
+    }
+  });
+  // ==================== END GITHUB MODAL ====================
+  // ==================== END FOLDER I/O ====================
+
+  function updateStat(){
+    $('statReadout').textContent = `OBJ ${String(objects.length).padStart(4,'0')} · READY`;
+  }
+
+  function hexToRgb(hex){
+    hex = hex.replace('#','');
+    if(hex.length === 3) hex = hex.split('').map(c=>c+c).join('');
+    const num = parseInt(hex,16);
+    return [ (num>>16)&255, (num>>8)&255, num&255 ];
+  }
+  function rgbToHex(r,g,b){
+    return '#' + [r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');
+  }
+  function hslToHex(h,s,l){
+    s/=100; l/=100;
+    const k = n => (n + h/30) % 12;
+    const a = s * Math.min(l, 1-l);
+    const f = n => l - a*Math.max(-1, Math.min(k(n)-3, Math.min(9-k(n), 1)));
+    return rgbToHex(255*f(0), 255*f(8), 255*f(4));
+  }
+  function hexToHsl(hex){
+    const [r,g,b] = hexToRgb(hex).map(v=>v/255);
+    const max = Math.max(r,g,b), min = Math.min(r,g,b);
+    let h=0, s=0; const l=(max+min)/2;
+    if(max!==min){
+      const d = max-min;
+      s = l>0.5 ? d/(2-max-min) : d/(max+min);
+      switch(max){
+        case r: h=(g-b)/d + (g<b?6:0); break;
+        case g: h=(b-r)/d + 2; break;
+        case b: h=(r-g)/d + 4; break;
+      }
+      h *= 60;
+    }
+    return [h, s*100, l*100];
+  }
+  function shiftColor(hex, hueDelta, satMul, lightMul){
+    let [h,s,l] = hexToHsl(hex);
+    h = (h + hueDelta + 360) % 360;
+    s = Math.min(100, Math.max(0, s*satMul));
+    l = Math.min(96, Math.max(4, l*lightMul));
+    return hslToHex(h, s, l);
+  }
+
+  // ---------------- 12 Highly Saturated Colors ----------------
+  function buildPalette(){
+    return [
+      '#ff0000', '#ff5500', '#ffaa00', '#ffff00',
+      '#66ff00', '#00ff66', '#00ffff', '#0066ff',
+      '#0000ff', '#7700ff', '#ff00ff', '#ff0066'
+    ];
+  }
+  const PALETTE = buildPalette();
+
+  // ---------------- drawing context init ----------------
+  const drawCanvas = $('drawCanvas');
+  const dctx = drawCanvas.getContext('2d', {willReadFrequently:true});
+  dctx.lineCap = 'round';
+  dctx.lineJoin = 'round';
+
+  let actionCounter = 0;
+  let selectedStrokeId = null;
+
+  let currentTool = 'brush';       
+  let strokeColor = '#1b1b1f';
+  let fillColor = '#ff5500';
+  let activeColorTarget = 'stroke'; 
+  let brushSize = 8;
+  let tolerance = 32;
+  let drawing = false;
+  let currentAction = null;
+
+  // 동적 원형 커서 가이드 제어 로직
+  function updateCursorState(e) {
+    const rect = drawCanvas.getBoundingClientRect();
+    if (currentTool === 'brush' || currentTool === 'eraser') {
+      drawCanvas.style.cursor = 'none';
+      const cursorCircle = $('canvasCursor');
+      cursorCircle.style.display = 'block';
+      const size = brushSize * (rect.width / 1080);
+      cursorCircle.style.width = size + 'px';
+      cursorCircle.style.height = size + 'px';
+      if (e) {
+        cursorCircle.style.left = (e.clientX - rect.left) + 'px';
+        cursorCircle.style.top = (e.clientY - rect.top) + 'px';
+      }
+    } else {
+      $('canvasCursor').style.display = 'none';
+      drawCanvas.style.cursor = currentTool === 'fill' ? 'copy' : (currentTool === 'select' ? 'pointer' : 'crosshair');
+    }
+  }
+
+  function updateBrushPreview(){
+    const dot = $('brushPreviewDot');
+    const size = Math.max(4, Math.min(32, brushSize));
+    dot.style.width = size + 'px';
+    dot.style.height = size + 'px';
+    dot.style.background = currentTool === 'eraser' ? '#cfcfcf' : strokeColor;
+    updateCursorState();
+  }
+
+  function updateColorPreviews(){
+    $('strokeSwatchPreview').style.background = strokeColor;
+    $('fillSwatchPreview').style.background = fillColor;
+    updateBrushPreview();
+  }
+
+  function updatePaletteLabel(){
+    if(selectedStrokeId != null){ $('paletteTargetLabel').textContent = '선택된 선 색상 편집 중'; }
+    else if(currentTool === 'select'){ $('paletteTargetLabel').textContent = '편집할 선을 캔버스에서 선택하세요'; }
+    else if(activeColorTarget === 'fill'){ $('paletteTargetLabel').textContent = '채우기 색상 편집 중'; }
+    else { $('paletteTargetLabel').textContent = '선 색상 편집 중'; }
+  }
+
+  function setActiveColorTarget(target){
+    activeColorTarget = target;
+    $('strokeTarget').classList.toggle('active', target==='stroke');
+    $('fillTarget').classList.toggle('active', target==='fill');
+    if(target==='stroke') $('customColorPicker').value = strokeColor;
+    else if(target==='fill') $('customColorPicker').value = fillColor;
+    else if(target==='selectedStroke' && selectedStrokeId!=null){
+      const a = actions.find(x=>x.id===selectedStrokeId);
+      if(a) $('customColorPicker').value = a.color;
+    }
+    updatePaletteLabel();
+  }
+
+  function applyStrokeStyle(){
+    dctx.lineWidth = brushSize;
+    if(currentTool === 'eraser'){
+      dctx.globalCompositeOperation = 'destination-out';
+      dctx.strokeStyle = 'rgba(0,0,0,1)';
+    } else {
+      dctx.globalCompositeOperation = 'source-over';
+      dctx.strokeStyle = strokeColor;
+    }
+  }
+
+  function getPos(e){
+    const rect = drawCanvas.getBoundingClientRect();
+    const scaleX = drawCanvas.width / rect.width;
+    const scaleY = drawCanvas.height / rect.height;
+    return { x:(e.clientX-rect.left)*scaleX, y:(e.clientY-rect.top)*scaleY };
+  }
+
+  function floodFillApply(ctx, seedX, seedY, hexColor, tol){
+    const w = ctx.canvas.width, h = ctx.canvas.height;
+    seedX = Math.max(0, Math.min(w-1, Math.floor(seedX)));
+    seedY = Math.max(0, Math.min(h-1, Math.floor(seedY)));
+    const imgData = ctx.getImageData(0,0,w,h);
+    const data = imgData.data;
+    const idx = (x,y) => (y*w+x)*4;
+    const si = idx(seedX,seedY);
+    const sr=data[si], sg=data[si+1], sb=data[si+2], sa=data[si+3];
+    const [fr,fg,fb] = hexToRgb(hexColor);
+    if(Math.abs(sr-fr)<3 && Math.abs(sg-fg)<3 && Math.abs(sb-fb)<3 && sa>250) return;
+
+    const tol2 = tol*tol*4 + 1;
+    function matches(i){
+      const dr=data[i]-sr, dg=data[i+1]-sg, db=data[i+2]-sb, da=data[i+3]-sa;
+      return (dr*dr+dg*dg+db*db+da*da) <= tol2;
+    }
+    const visited = new Uint8Array(w*h);
+    const stack = [[seedX,seedY]];
+    while(stack.length){
+      const [x,y] = stack.pop();
+      if(x<0||x>=w||y<0||y>=h) continue;
+      const vi = y*w+x;
+      if(visited[vi]) continue;
+      const i = idx(x,y);
+      if(!matches(i)) continue;
+      let xl = x;
+      while(xl>0 && !visited[y*w+xl-1] && matches(idx(xl-1,y))) xl--;
+      let xr = x;
+      while(xr<w-1 && !visited[y*w+xr+1] && matches(idx(xr+1,y))) xr++;
+      for(let xx=xl; xx<=xr; xx++){
+        const ii = idx(xx,y);
+        data[ii]=fr; data[ii+1]=fg; data[ii+2]=fb; data[ii+3]=255;
+        visited[y*w+xx]=1;
+        if(y>0 && !visited[(y-1)*w+xx] && matches(idx(xx,y-1))) stack.push([xx,y-1]);
+        if(y<h-1 && !visited[(y+1)*w+xx] && matches(idx(xx,y+1))) stack.push([xx,y+1]);
+      }
+    }
+    ctx.putImageData(imgData,0,0);
+  }
+
+  function renderStrokeFull(ctx, action){
+    const pts = action.points;
+    if(pts.length===0) return;
+    ctx.save();
+    ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.lineWidth = action.width;
+    if(action.tool==='eraser'){ ctx.globalCompositeOperation='destination-out'; ctx.strokeStyle='rgba(0,0,0,1)'; }
+    else { ctx.globalCompositeOperation='source-over'; ctx.strokeStyle=action.color; }
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    if(pts.length===1){
+      ctx.lineTo(pts[0].x+0.1, pts[0].y+0.1);
+    } else {
+      for(let i=2;i<pts.length;i++){
+        const mid = {x:(pts[i-1].x+pts[i].x)/2, y:(pts[i-1].y+pts[i].y)/2};
+        ctx.quadraticCurveTo(pts[i-1].x, pts[i-1].y, mid.x, mid.y);
+      }
+      const last = pts[pts.length-1];
+      ctx.lineTo(last.x, last.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawSelectionHighlight(a){
+    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+    a.points.forEach(p=>{
+      if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x;
+      if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y;
+    });
+    const pad = a.width/2 + 10;
+    minX-=pad; minY-=pad; maxX+=pad; maxY+=pad;
+    dctx.save();
+    dctx.strokeStyle = '#c6ff3d';
+    dctx.lineWidth = 3;
+    dctx.setLineDash([10,8]);
+    dctx.strokeRect(minX, minY, maxX-minX, maxY-minY);
+    dctx.restore();
+  }
+
+  function renderAll(){
+    dctx.clearRect(0,0,drawCanvas.width, drawCanvas.height);
+    actions.forEach(a=>{
+      if(a.type==='stroke') renderStrokeFull(dctx, a);
+      else if(a.type==='fill') floodFillApply(dctx, a.x, a.y, a.color, a.tolerance);
+    });
+    if(selectedStrokeId != null){
+      const sel = actions.find(a=>a.id===selectedStrokeId);
+      if(sel) drawSelectionHighlight(sel);
+    }
+  }
+
+  function distToSegment(p,a,b){
+    const l2 = (b.x-a.x)**2 + (b.y-a.y)**2;
+    if(l2===0) return Math.hypot(p.x-a.x, p.y-a.y);
+    let t = ((p.x-a.x)*(b.x-a.x) + (p.y-a.y)*(b.y-a.y)) / l2;
+    t = Math.max(0, Math.min(1, t));
+    const px = a.x + t*(b.x-a.x), py = a.y + t*(b.y-a.y);
+    return Math.hypot(p.x-px, p.y-py);
+  }
+  function hitTestStroke(pos){
+    for(let i=actions.length-1; i>=0; i--){
+      const a = actions[i];
+      if(a.type!=='stroke' || a.tool!=='brush') continue;
+      const thresh = a.width/2 + 8;
+      const pts = a.points;
+      if(pts.length===1){
+        if(Math.hypot(pos.x-pts[0].x, pos.y-pts[0].y) <= thresh) return a;
+        continue;
+      }
+      for(let j=0;j<pts.length-1;j++){
+        if(distToSegment(pos, pts[j], pts[j+1]) <= thresh) return a;
+      }
+    }
+    return null;
+  }
+
+  function selectStroke(a){
+    selectedStrokeId = a.id;
+    $('strokeEditor').hidden = false;
+    $('selStrokeColorPreview').style.background = a.color;
+    $('selStrokeWidth').value = a.width;
+    $('selStrokeWidthVal').textContent = a.width;
+    setActiveColorTarget('selectedStroke');
+    renderAll();
+  }
+  function clearStrokeSelection(){
+    selectedStrokeId = null;
+    $('strokeEditor').hidden = true;
+    setActiveColorTarget(currentTool==='fill' ? 'fill' : 'stroke');
+    renderAll();
+  }
+
+  drawCanvas.addEventListener('pointerdown', e=>{
+    const p = getPos(e);
+
+    if(currentTool === 'fill'){
+      drawCanvas.style.cursor = 'wait';
+      setTimeout(()=>{
+        floodFillApply(dctx, p.x, p.y, fillColor, tolerance);
+        actions.push({ type:'fill', id:++actionCounter, x:p.x, y:p.y, color:fillColor, tolerance });
+        redoStack.length = 0; // 새로운 드로잉 액션 유입 시 레두 히스토리 초기화
+        drawCanvas.style.cursor = 'copy';
+      }, 10);
+      return;
+    }
+
+    if(currentTool === 'select'){
+      const hit = hitTestStroke(p);
+      if(hit) selectStroke(hit); else clearStrokeSelection();
+      return;
+    }
+
+    drawing = true;
+    drawCanvas.setPointerCapture(e.pointerId);
+    currentAction = { type:'stroke', id:++actionCounter, tool:currentTool, color:strokeColor, width:brushSize, points:[p] };
+    applyStrokeStyle();
+    dctx.beginPath();
+    dctx.moveTo(p.x, p.y);
+    dctx.lineTo(p.x+0.1, p.y+0.1);
+    dctx.stroke();
+  });
+
+  drawCanvas.addEventListener('pointermove', e=>{
+    updateCursorState(e);
+    if(!drawing || !currentAction) return;
+    const p = getPos(e);
+    currentAction.points.push(p);
+    const pts = currentAction.points;
+    const l = pts.length;
+    if(l > 2){
+      const mid = { x:(pts[l-2].x+p.x)/2, y:(pts[l-2].y+p.y)/2 };
+      applyStrokeStyle();
+      dctx.quadraticCurveTo(pts[l-2].x, pts[l-2].y, mid.x, mid.y);
+      dctx.stroke();
+    }
+  });
+
+  drawCanvas.addEventListener('pointerenter', e => updateCursorState(e));
+  drawCanvas.addEventListener('pointerleave', () => { $('canvasCursor').style.display = 'none'; });
+
+  function endStroke(){
+    if(drawing){
+      drawing = false;
+      dctx.beginPath();
+      if(currentAction && currentAction.points.length>0){
+        actions.push(currentAction);
+        redoStack.length = 0; // 히스토리 스택 리셋 보정
+      }
+      currentAction = null;
+    }
+  }
+  window.addEventListener('pointerup', endStroke);
+  window.addEventListener('pointercancel', endStroke);
+
+  // Undo / Redo 핵심 이벤트 리스너 바인딩 연산
+  $('undoBtn').addEventListener('click', () => {
+    if (actions.length === 0) {
+      toast('되돌릴 드로잉 기록이 없습니다.');
+      return;
+    }
+    const undoneAction = actions.pop();
+    redoStack.push(undoneAction);
+    clearStrokeSelection();
+    renderAll();
+    toast('직전 드로잉 단계를 되돌렸습니다.');
+  });
+
+  $('redoBtn').addEventListener('click', () => {
+    if (redoStack.length === 0) {
+      toast('다시 실행할 앞선 드로잉 기록이 없습니다.');
+      return;
+    }
+    const redoneAction = redoStack.pop();
+    actions.push(redoneAction);
+    clearStrokeSelection();
+    renderAll();
+    toast('되돌렸던 단계를 다시 실행했습니다.');
+  });
+
+  document.querySelectorAll('.tool-select .tool-btn:not(.tool-clear-btn)').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.tool-select .tool-btn:not(.tool-clear-btn)').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      currentTool = btn.dataset.tool;
+      $('toleranceRow').style.opacity = currentTool === 'fill' ? '1' : '0.4';
+      updateBrushPreview();
+      if(currentTool !== 'select'){
+        clearStrokeSelection();
+      } else {
+        updatePaletteLabel();
+      }
+    });
+  });
+
+  $('strokeTarget').addEventListener('click', ()=> setActiveColorTarget('stroke'));
+  $('fillTarget').addEventListener('click', ()=> setActiveColorTarget('fill'));
+
+  const paletteGrid = $('paletteGrid');
+  PALETTE.forEach(hex=>{
+    const cell = document.createElement('div');
+    cell.className = 'palette-cell';
+    cell.style.background = hex;
+    cell.title = hex;
+    cell.addEventListener('click', ()=>{
+      applyColorToActiveTarget(hex);
+      document.querySelectorAll('.palette-cell.selected').forEach(c=>c.classList.remove('selected'));
+      cell.classList.add('selected');
+    });
+    paletteGrid.appendChild(cell);
+  });
+
+  function applyColorToActiveTarget(hex){
+    if(activeColorTarget === 'selectedStroke' && selectedStrokeId != null){
+      const a = actions.find(x=>x.id===selectedStrokeId);
+      if(a){
+        a.color = hex;
+        $('selStrokeColorPreview').style.background = hex;
+        redoStack.length = 0;
+        renderAll();
+      }
+    } else if(activeColorTarget === 'stroke'){
+      strokeColor = hex;
+    } else {
+      fillColor = hex;
+    }
+    updateColorPreviews();
+    $('customColorPicker').value = hex;
+  }
+
+  $('customColorPicker').addEventListener('input', e=>{
+    applyColorToActiveTarget(e.target.value);
+    document.querySelectorAll('.palette-cell.selected').forEach(c=>c.classList.remove('selected'));
+  });
+
+  $('brushSize').addEventListener('input', e=>{
+    brushSize = parseInt(e.target.value);
+    $('brushSizeVal').textContent = brushSize;
+    updateBrushPreview();
+  });
+  $('tolerance').addEventListener('input', e=>{
+    tolerance = parseInt(e.target.value);
+    $('toleranceVal').textContent = tolerance;
+  });
+  $('toleranceRow').style.opacity = '0.4';
+
+  $('selStrokeWidth').addEventListener('input', e=>{
+    const val = parseInt(e.target.value);
+    $('selStrokeWidthVal').textContent = val;
+    if(selectedStrokeId != null){
+      const a = actions.find(x=>x.id===selectedStrokeId);
+      if(a){ a.width = val; redoStack.length = 0; renderAll(); }
+    }
+  });
+  $('deselectStrokeBtn').addEventListener('click', clearStrokeSelection);
+  $('deleteStrokeBtn').addEventListener('click', ()=>{
+    if(selectedStrokeId != null){
+      const idx = actions.findIndex(x=>x.id===selectedStrokeId);
+      if(idx>-1) actions.splice(idx,1);
+    }
+    redoStack.length = 0;
+    clearStrokeSelection();
+  });
+
+  $('clearDrawBtn').addEventListener('click', ()=>{
+    actions.length = 0;
+    redoStack.length = 0;
+    clearStrokeSelection();
+    toast('캔버스 드로잉이 초기화되었습니다.');
+  });
+
+  updateColorPreviews();
+
+  // ---------------- bbox / crop utils ----------------
+  function getBBox(canvas){
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    const data = ctx.getImageData(0,0,w,h).data;
+    let minX=w, minY=h, maxX=-1, maxY=-1;
+    for(let y=0; y<h; y++){
+      const rowOff = y*w*4;
+      for(let x=0; x<w; x++){
+        const a = data[rowOff + x*4 + 3];
+        if(a > 10){
+          if(x<minX) minX=x;
+          if(x>maxX) maxX=x;
+          if(y<minY) minY=y;
+          if(y>maxY) maxY=y;
+        }
+      }
+    }
+    if(maxX < 0) return null;
+    return { minX, minY, w:maxX-minX+1, h:maxY-minY+1 };
+  }
+
+  function cropCanvas(canvas, bbox){
+    const c = document.createElement('canvas');
+    c.width = bbox.w; c.height = bbox.h;
+    c.getContext('2d').drawImage(canvas, bbox.minX, bbox.minY, bbox.w, bbox.h, 0, 0, bbox.w, bbox.h);
+    return c;
+  }
+
+  function buildRecipeForBBox(bbox){
+    const margin = 4;
+    const result = [];
+    actions.forEach(a=>{
+      if(a.type==='stroke'){
+        const inside = a.points.some(p=>
+          p.x>=bbox.minX-margin && p.x<=bbox.minX+bbox.w+margin &&
+          p.y>=bbox.minY-margin && p.y<=bbox.minY+bbox.h+margin);
+        if(inside){
+          result.push({
+            type:'stroke', tool:a.tool, color:a.color, width:a.width,
+            points:a.points.map(p=>({x:p.x-bbox.minX, y:p.y-bbox.minY}))
+          });
+        }
+      } else if(a.type==='fill'){
+        const inside = a.x>=bbox.minX-margin && a.x<=bbox.minX+bbox.w+margin &&
+                        a.y>=bbox.minY-margin && a.y<=bbox.minY+bbox.h+margin;
+        if(inside){
+          result.push({ type:'fill', x:a.x-bbox.minX, y:a.y-bbox.minY, color:a.color, tolerance:a.tolerance });
+        }
+      }
+    });
+    return result;
+  }
+
+  // ---------------- object registry ----------------
+  function addObject(canvas, recipe){
+    objCounter++;
+    const obj = { id: objCounter, canvas, w: canvas.width, h: canvas.height, recipe: recipe || null };
+    objects.push(obj);
+    renderGallery();
+    updateStat();
+    return obj;
+  }
+
+  function removeObject(id){
+    const idx = objects.findIndex(o=>o.id===id);
+    if(idx>-1) objects.splice(idx,1);
+    if(currentVarTarget && currentVarTarget.id===id){
+      currentVarTarget = null;
+      $('variationBlock').hidden = true;
+    }
+    renderGallery();
+    updateStat();
+  }
+
+  function makeThumbCanvas(srcCanvas){
+    const c = document.createElement('canvas');
+    c.width = srcCanvas.width; c.height = srcCanvas.height;
+    c.getContext('2d').drawImage(srcCanvas,0,0);
+    return c;
+  }
+
+  function renderGallery(){
+    const grid = $('objectsGrid');
+    grid.innerHTML = '';
+    $('objCount').textContent = objects.length + '개';
+    if(objects.length === 0){
+      grid.innerHTML = '<p class="empty-hint">아직 등록된 오브젝트가 없습니다.<br>왼쪽에서 그림을 그리고 등록해보세요.</p>';
+      return;
+    }
+    objects.forEach(obj=>{
+      const card = document.createElement('div');
+      card.className = 'obj-card' + (currentVarTarget && currentVarTarget.id===obj.id ? ' selected' : '');
+
+      const thumbWrap = document.createElement('div');
+      thumbWrap.className = 'obj-thumb';
+      thumbWrap.appendChild(makeThumbCanvas(obj.canvas));
+      card.appendChild(thumbWrap);
+
+      const meta = document.createElement('div');
+      meta.className = 'obj-meta';
+      meta.innerHTML = `<span>OBJ-${String(obj.id).padStart(2,'0')}</span><span>${obj.w}×${obj.h}</span>`;
+      card.appendChild(meta);
+
+      const actionsRow = document.createElement('div');
+      actionsRow.className = 'obj-actions';
+
+      const varBtn = document.createElement('button');
+      varBtn.className = 'btn btn-sm';
+      varBtn.textContent = '베리에이션';
+      varBtn.addEventListener('click', ()=> selectForVariation(obj));
+      actionsRow.appendChild(varBtn);
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn btn-sm btn-coral';
+      delBtn.textContent = '삭제';
+      delBtn.addEventListener('click', ()=> removeObject(obj.id));
+      actionsRow.appendChild(delBtn);
+
+      card.appendChild(actionsRow);
+      grid.appendChild(card);
+    });
+  }
+
+  $('registerBtn').addEventListener('click', async ()=>{
+    const bbox = getBBox(drawCanvas);
+    if(!bbox){
+      toast('캔버스에 그림을 먼저 그려주세요.');
+      return;
+    }
+    const cropped = cropCanvas(drawCanvas, bbox);
+    const recipe = buildRecipeForBBox(bbox);
+    const obj = addObject(cropped, recipe);
+    toast(`OBJ-${String(objCounter).padStart(2,'0')} 등록 완료 (${cropped.width}×${cropped.height})`);
+    if(!$('keepAfterRegister').checked){
+      actions.length = 0;
+      redoStack.length = 0;
+      clearStrokeSelection();
+    }
+    // 자동으로 오브젝트만 담긴 PNG를 [연결폴더]/YYYY-MM-DD/ 로 저장 (미연결 시 다운로드 폴백)
+    try {
+      await savePatternToFolder(cropped, obj.id);
+    } catch (err) {
+      console.error(err);
+      toast('저장 중 오류: ' + (err.message || err));
+    }
+  });
+
+  // ================= EXTREME DIVERSITY REGENERATOR ENGINE =================
+  function applyDirectionalJitter(pts, amp) {
+    if (pts.length < 2) return pts;
+    return pts.map((p, i) => {
+      let next = pts[i + 1] || p;
+      let prev = pts[i - 1] || p;
+      let dx = next.x - prev.x;
+      let dy = next.y - prev.y;
+      let len = Math.hypot(dx, dy) || 1;
+      let nx = -dy / len; 
+      let ny = dx / len;  
+
+      // 지터 폭과 무작위 텐션을 강화하여 선의 파격적인 변주 유도
+      let shiftNormal = rand(-amp, amp) * 1.8;
+      let shiftTangent = rand(-amp, amp) * 1.1;
+      return {
+        x: p.x + nx * shiftNormal + (dx / len) * shiftTangent,
+        y: p.y + ny * shiftNormal + (dy / len) * shiftTangent
+      };
+    });
+  }
+
+  function drawSinglePath(ctx, pts) {
+    if (pts.length === 0) return;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineTo(pts[i].x, pts[i].y);
+    }
+    ctx.stroke();
+  }
+
+  // ⚠ 원본 누락 헬퍼 보강: 폴리라인의 총 길이(연속 점 사이 유클리드 거리의 합)
+  function pathLen(pts){
+    let L = 0;
+    for(let i=1; i<pts.length; i++){
+      L += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
+    }
+    return L;
+  }
+
+  function resamplePts(pts, n){
+    if(pts.length<2) return pts.slice();
+    const L = pathLen(pts);
+    if(L===0) return pts.slice(0,1);
+    const step = L/(n-1);
+    const out = [ {x:pts[0].x, y:pts[0].y} ];
+    let acc = 0, i = 1;
+    let prev = pts[0];
+    while(out.length < n-1 && i < pts.length){
+      const seg = Math.hypot(pts[i].x-prev.x, pts[i].y-prev.y);
+      if(acc + seg >= step){
+        const t = (step-acc)/seg;
+        const np = { x: prev.x + t*(pts[i].x-prev.x), y: prev.y + t*(pts[i].y-prev.y) };
+        out.push(np);
+        prev = np;
+        acc = 0;
+      } else {
+        acc += seg;
+        prev = pts[i];
+        i++;
+      }
+    }
+    while(out.length < n-1) out.push({x:pts[pts.length-1].x, y:pts[pts.length-1].y});
+    out.push({x:pts[pts.length-1].x, y:pts[pts.length-1].y});
+    return out;
+  }
+
+  // ==================== SHAPE-PRESERVING WARP FIELDS ====================
+  // 포인트별 랜덤 노이즈로는 형태가 파괴되므로, 좌표계 전체를 부드럽게 변형하는
+  // 코히런트 워프 함수를 사용해 "원본이 무엇인지 알아볼 수 있는" 다양한 변주를 생성.
+  // buildWarp(스타일, 오브젝트) → (점 좌표) => 변형된 점 좌표 를 반환
+  function buildWarp(st, obj){
+    const cxRef = obj.w / 2;
+    const cyRef = obj.h / 2;
+    const maxR  = Math.hypot(obj.w/2, obj.h/2) || 1;
+    // 부호 있는 랜덤: 항상 최소값 이상의 크기를 보장하며 방향은 무작위 → 매 변주마다 시각적 특성이 뚜렷
+    const signedRand = (min, max) => (Math.random() < 0.5 ? -1 : 1) * rand(min, max);
+
+    if(st.warp === 'wave'){
+      // 사인파 기반 유기적 웨이브: X는 Y좌표에, Y는 X좌표에 따라 진동 → 물결 형태
+      const ampX   = rand(st.waveAmp[0], st.waveAmp[1]);
+      const ampY   = rand(st.waveAmp[0], st.waveAmp[1]);
+      const freqX  = rand(0.010, 0.022);
+      const freqY  = rand(0.010, 0.022);
+      const phaseX = rand(0, Math.PI * 2);
+      const phaseY = rand(0, Math.PI * 2);
+      return (p)=>({
+        x: p.x + Math.sin(p.y * freqY + phaseX) * ampX,
+        y: p.y + Math.sin(p.x * freqX + phaseY) * ampY,
+      });
+    }
+
+    if(st.warp === 'bulge'){
+      // 라디얼 벌지/핀치: 중심으로부터 거리에 따라 확장 또는 수축, 가장자리에서 0으로 수렴
+      const strength = signedRand(st.bulgeRange[0], st.bulgeRange[1]);
+      return (p)=>{
+        const dx = p.x - cxRef, dy = p.y - cyRef;
+        const t  = Math.hypot(dx, dy) / maxR;
+        const factor = 1 + strength * Math.sin(t * Math.PI);
+        return { x: cxRef + dx * factor, y: cyRef + dy * factor };
+      };
+    }
+
+    if(st.warp === 'twist'){
+      // 트위스트: 중심에서 멀수록 회전각이 커지는 소용돌이 왜곡
+      const amount = signedRand(st.twistRange[0], st.twistRange[1]);
+      return (p)=>{
+        const dx = p.x - cxRef, dy = p.y - cyRef;
+        const t  = Math.hypot(dx, dy) / maxR;
+        const ang = t * amount;
+        const cs = Math.cos(ang), sn = Math.sin(ang);
+        return { x: cxRef + dx * cs - dy * sn, y: cyRef + dx * sn + dy * cs };
+      };
+    }
+
+    if(st.warp === 'noise'){
+      // 저주파 사인파 합성으로 코히런트 노이즈 근사 (부드러운 유기 왜곡)
+      const amp = rand(st.noiseAmp[0], st.noiseAmp[1]);
+      const s1  = rand(0, 100), s2 = rand(0, 100);
+      return (p)=>{
+        const nx = Math.sin(p.x * 0.020 + s1) * Math.cos(p.y * 0.017 + s2) * amp
+                 + Math.sin(p.x * 0.045 + s2) * 0.35 * amp;
+        const ny = Math.cos(p.x * 0.019 + s2) * Math.sin(p.y * 0.023 + s1) * amp
+                 + Math.cos(p.y * 0.038 + s1) * 0.35 * amp;
+        return { x: p.x + nx, y: p.y + ny };
+      };
+    }
+
+    if(st.warp === 'shear'){
+      // 셰어: 한 축을 다른 축에 대해 기울여 평면 자체를 비트는 왜곡
+      const shX = signedRand(st.shearRange[0], st.shearRange[1]);
+      const shY = signedRand(st.shearRange[0], st.shearRange[1]);
+      return (p)=>({
+        x: p.x + (p.y - cyRef) * shX,
+        y: p.y + (p.x - cxRef) * shY,
+      });
+    }
+
+    // 'none' — 워프 없음(에코·강약 스타일 등이 사용)
+    return (p)=> p;
+  }
+
+  // ==================== 6가지 형태 다양성 스타일 ====================
+  // 원본 형태를 알아볼 수 있게 유지하면서 각 카드가 시각적으로 뚜렷이 달라 보이도록 설계.
+  // - jitter는 손그림 질감용 미세 노이즈(≤ 2px)로만 사용
+  // - 형태 다양성은 warp 필드가 담당
+  // - 색상 다양성은 팔레트 배정 방식(makeVariation 내부)이 담당하며
+  //   hueRange는 팔레트 각 항목이 취할 수 있는 색상환 회전 범위를 정의
+  const VAR_STYLES = [
+    { label:'유기적 웨이브', type:'refined', warp:'wave',
+      waveAmp:[7, 15],
+      jitter: 0.6, widthMul: 1.0,
+      hueRange:[-140, 140], satRange:[0.75, 1.3], lightRange:[0.85, 1.15] },
+
+    { label:'라디얼 벌지', type:'refined', warp:'bulge',
+      bulgeRange:[0.15, 0.32],
+      jitter: 0.6, widthMul: 1.0,
+      hueRange:[-120, 120], satRange:[0.75, 1.3], lightRange:[0.85, 1.15] },
+
+    { label:'회전 트위스트', type:'refined', warp:'twist',
+      twistRange:[0.28, 0.65],
+      jitter: 0.5, widthMul: 1.0,
+      hueRange:[-110, 110], satRange:[0.75, 1.3], lightRange:[0.85, 1.15] },
+
+    { label:'코히런트 노이즈', type:'refined', warp:'noise',
+      noiseAmp:[5, 11],
+      jitter: 0.5, widthMul: 1.05,
+      hueRange:[-130, 130], satRange:[0.75, 1.3], lightRange:[0.85, 1.15] },
+
+    { label:'회화 강약 증폭', type:'gestural', warp:'shear',
+      shearRange:[0.05, 0.14],
+      jitter: 1.0, widthMul: 1.5,
+      hueRange:[-90, 90],   satRange:[0.9, 1.35],  lightRange:[0.85, 1.1] },
+
+    { label:'RGB 에코 잔상', type:'echo', warp:'none',
+      jitter: 0.8, widthMul: 0.9,
+      hueRange:[-160, 160], satRange:[0.75, 1.35], lightRange:[0.85, 1.15] },
+  ];
+
+  function makeVariation(obj, styleIdx){
+    const st = VAR_STYLES[styleIdx % VAR_STYLES.length];
+    if(!obj.recipe || obj.recipe.length === 0) return makeTransformVariation(obj, st);
+
+    const maxDim = Math.max(obj.w, obj.h);
+    const size = Math.ceil(maxDim * 2.0) + 120;
+    const centerX = size/2, centerY = size/2;
+
+    const angle = rand(-12, 12) * Math.PI/180;
+    // 완만한 비균일 스케일(0.88 ~ 1.14 사이 살짝 다른 X/Y 배율) → 형태는 인식되면서
+    // 각 카드가 조금씩 다른 실루엣을 갖도록 유도
+    const baseScale = rand(0.88, 1.14);
+    const scaleX = baseScale * rand(0.94, 1.06);
+    const scaleY = baseScale * rand(0.94, 1.06);
+
+    // ==================== COLOR VARIATION (팔레트 기반 다색 배정) ====================
+    // 이 베리에이션에 사용할 색상 이동 팔레트를 3~5개 생성.
+    // 각 선/채우기 요소는 이 팔레트에서 랜덤으로 하나를 뽑아 색상 이동을 적용한다.
+    // → 한 카드 안에서도 요소마다 서로 다른 색으로 표현되어 "다양한 색상 변화"가 발생.
+    const paletteSize = 3 + Math.floor(rand(0, 3));  // 3, 4, 또는 5
+    const colorPalette = [];
+    for(let i = 0; i < paletteSize; i++){
+      colorPalette.push({
+        hue:   rand(st.hueRange[0],   st.hueRange[1]),
+        sat:   rand(st.satRange[0],   st.satRange[1]),
+        light: rand(st.lightRange[0], st.lightRange[1]),
+      });
+    }
+    // 팔레트에서 한 항목을 랜덤으로 뽑기
+    const pickShift = () => colorPalette[Math.floor(Math.random() * colorPalette.length)];
+    // 원본 색상에 팔레트 이동을 적용해 새 색상 반환
+    const pickColor = (hex) => {
+      const s = pickShift();
+      return shiftColor(hex, s.hue, s.sat, s.light);
+    };
+    // makeTransformVariation 폴백에서 참조하는 대표 이동값(팔레트 중앙값 근사)
+    const hueShift = colorPalette[0].hue;
+    const satMul   = colorPalette[0].sat;
+    const lightMul = colorPalette[0].light;
+
+    // ==================== SHAPE WARP ====================
+    // 스타일마다 매번 새로운 워프 필드를 생성 → 형태 다양성의 핵심
+    const warpFn = buildWarp(st, obj);
+
+    function transformPt(p){
+      // 1) 코히런트 워프로 형태를 부드럽게 변형
+      const w = warpFn(p);
+      // 2) 오브젝트 중심 기준 어파인 변환(비균일 스케일 + 회전 + 중심 이동)
+      const dx = (w.x - obj.w/2) * scaleX;
+      const dy = (w.y - obj.h/2) * scaleY;
+      return {
+        x: dx*Math.cos(angle) - dy*Math.sin(angle) + centerX,
+        y: dx*Math.sin(angle) + dy*Math.cos(angle) + centerY
+      };
+    }
+
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    const cx = c.getContext('2d');
+    const redrawnActions = [];
+
+    obj.recipe.forEach(a=>{
+      if(a.type === 'stroke'){
+        let pts = resamplePts(a.points, Math.max(16, Math.floor(a.points.length * 1.1)));
+
+        // ⚠ 버그 수정: finalPts 등 재사용 변수를 스트로크 스코프의 최상단에서 선언
+        //   (기존에는 if 블록 내부에서 let 으로 선언되어 있어 외부에서 참조 시 ReferenceError 발생)
+        let finalPts   = null;
+        let finalWidth = a.width;
+        let finalColor = a.color;
+
+        cx.save();
+        cx.lineCap = 'round'; cx.lineJoin = 'round';
+
+        if(a.tool === 'eraser'){
+          // 지우개는 색상 변조 없이 destination-out 만 적용
+          cx.globalCompositeOperation = 'destination-out';
+          cx.strokeStyle = 'rgba(0,0,0,1)';
+          finalWidth = Math.max(1.5, a.width * baseScale);
+          cx.lineWidth = finalWidth;
+          let jittered = applyDirectionalJitter(pts, st.jitter);
+          finalPts = jittered.map(transformPt);
+          drawSinglePath(cx, finalPts);
+        } else {
+          cx.globalCompositeOperation = 'source-over';
+          // 이 선에 대해 팔레트에서 한 항목을 뽑아 색상 이동 적용 → 선마다 다른 색
+          const strokeShift = pickShift();
+          finalColor = shiftColor(a.color, strokeShift.hue, strokeShift.sat, strokeShift.light);
+          cx.strokeStyle = finalColor;
+
+          if (st.type === 'gestural') {
+            // 회화적 강약: 붓질의 시작·중간·끝 두께가 사인파로 변화, 워프(셰어)로 기울기 왜곡 추가
+            let jittered = applyDirectionalJitter(pts, st.jitter);
+            finalPts = jittered.map(transformPt);
+            finalWidth = Math.max(1.2, a.width * st.widthMul);
+            for (let i = 1; i < finalPts.length; i++) {
+              const t = i / finalPts.length;
+              cx.lineWidth = Math.max(1.2, a.width * st.widthMul * (0.35 + 1.1 * Math.sin(t * Math.PI)));
+              cx.beginPath();
+              cx.moveTo(finalPts[i - 1].x, finalPts[i - 1].y);
+              cx.lineTo(finalPts[i].x, finalPts[i].y);
+              cx.stroke();
+            }
+          }
+          else if (st.type === 'echo') {
+            // RGB 잔상: 3개 레이어가 이 선의 팔레트 색을 중심으로 좌우 RGB 분리
+            // → 선마다 다른 팔레트 색을 취하되, 한 선의 3 레이어는 색상 분리 효과로 묶임
+            finalPts = pts.map(transformPt);
+            finalWidth = Math.max(1, a.width * st.widthMul);
+            const offsets = [ {x:-3,y:-2}, {x:0,y:0}, {x:3,y:2} ];
+            for (let s = 0; s < 3; s++) {
+              cx.lineWidth = Math.max(1, a.width * st.widthMul);
+              cx.globalAlpha = 0.75;
+              cx.strokeStyle = shiftColor(a.color, strokeShift.hue + (s - 1) * 30, strokeShift.sat, strokeShift.light);
+              const layer = pts.map(p => ({
+                x: p.x + offsets[s].x,
+                y: p.y + offsets[s].y
+              })).map(transformPt);
+              drawSinglePath(cx, layer);
+            }
+            cx.globalAlpha = 1;
+          }
+          else {
+            // refined / wave / bulge / twist / noise 계열 — 워프 함수가 형태 다양성을 담당
+            // 여기서는 손그림 질감을 위한 미세 지터만 얹고 곧게 그림
+            let jittered = applyDirectionalJitter(pts, st.jitter);
+            finalPts = jittered.map(transformPt);
+            finalWidth = Math.max(1, a.width * st.widthMul);
+            cx.lineWidth = finalWidth;
+            drawSinglePath(cx, finalPts);
+          }
+        }
+        cx.restore();
+
+        // 유효한 포인트가 있을 때만 레시피 저장 (변형된 색상·두께 반영)
+        if (finalPts && finalPts.length > 0) {
+          redrawnActions.push({
+            type:'stroke',
+            tool:a.tool,
+            color: finalColor,
+            width: finalWidth,
+            points: finalPts
+          });
+        }
+      } else if(a.type === 'fill'){
+        const finalSeed = transformPt({x:a.x, y:a.y});
+        const shiftedFillColor = pickColor(a.color);   // 채우기도 팔레트에서 뽑아 → 채우기마다 다른 색
+        floodFillApply(cx, finalSeed.x, finalSeed.y, shiftedFillColor, a.tolerance);
+        redrawnActions.push({ type:'fill', x:finalSeed.x, y:finalSeed.y, color:shiftedFillColor, tolerance:a.tolerance });
+      }
+    });
+
+    const bbox = getBBox(c);
+    if(!bbox) return { canvas:c, recipe:null, label:st.label };
+    const cropped = cropCanvas(c, bbox);
+    const recipeForStorage = redrawnActions.map(a=>{
+      if(a.type==='stroke'){
+        return { type:'stroke', tool:a.tool, color:a.color, width:a.width, points:a.points.map(p=>({x:p.x-bbox.minX, y:p.y-bbox.minY})) };
+      }
+      return { type:'fill', x:a.x-bbox.minX, y:a.y-bbox.minY, color:a.color, tolerance:a.tolerance };
+    });
+    return { canvas: cropped, recipe: recipeForStorage, label: st.label };
+  }
+
+  function makeTransformVariation(obj, st){
+    // 레시피가 없는 오브젝트(외부 이미지 등)의 대체 변주:
+    // 캔버스 회전·스케일 변환 + canvas filter 로 색상(hue/saturation) 시프트 적용
+    const size = Math.max(obj.w, obj.h) + 60;
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    const cx = c.getContext('2d');
+
+    // 스타일 색상 범위 내에서 랜덤 시프트 산출
+    const hueShift = rand(st.hueRange[0], st.hueRange[1]);
+    const satMul   = rand(st.satRange[0], st.satRange[1]);
+
+    cx.translate(size/2, size/2);
+    cx.rotate(rand(-30, 30) * Math.PI/180);
+    cx.scale(rand(0.65, 1.45), rand(0.65, 1.45));
+    // hue-rotate / saturate 필터로 원본 이미지에 색상 변주 적용
+    cx.filter = `hue-rotate(${hueShift.toFixed(1)}deg) saturate(${satMul.toFixed(2)})`;
+    cx.drawImage(obj.canvas, -obj.w/2, -obj.h/2, obj.w, obj.h);
+    cx.filter = 'none';
+
+    const bbox = getBBox(c);
+    const label = (st && st.label) ? st.label : '고각 해체';
+    if(!bbox) return { canvas:c, recipe:null, label };
+    return { canvas: cropCanvas(c, bbox), recipe:null, label };
+  }
+
+  function selectForVariation(obj){
+    currentVarTarget = obj;
+    $('varTargetLabel').textContent = `OBJ-${String(obj.id).padStart(2,'0')}`;
+    $('variationBlock').hidden = false;
+    regenerateVariations();
+    renderGallery();
+    $('variationBlock').scrollIntoView({behavior:'smooth', block:'nearest'});
+  }
+
+  function regenerateVariations(){
+    if(!currentVarTarget) return;
+    variationsCache = [];
+    for(let i=0;i<6;i++){
+      variationsCache.push(makeVariation(currentVarTarget, i));
+    }
+    renderVariationsGrid();
+  }
+
+  function renderVariationsGrid(){
+    const grid = $('variationsGrid');
+    grid.innerHTML = '';
+    variationsCache.forEach((vc)=>{
+      const card = document.createElement('div');
+      card.className = 'var-card';
+      const thumb = document.createElement('div');
+      thumb.className = 'var-thumb';
+      thumb.appendChild(makeThumbCanvas(vc.canvas));
+      card.appendChild(thumb);
+      const tag = document.createElement('div');
+      tag.className = 'obj-meta';
+      tag.innerHTML = `<span>${vc.label}</span>`;
+      card.appendChild(tag);
+      const addBtn = document.createElement('button');
+      addBtn.className = 'btn btn-sm btn-full';
+      addBtn.textContent = '표본으로 추가';
+      addBtn.addEventListener('click', async ()=>{
+        const c = makeThumbCanvas(vc.canvas);
+        const obj = addObject(c, vc.recipe);
+        toast('베리에이션이 표본 보관함에 추가되었습니다.');
+        try { await savePatternToFolder(c, obj.id); } catch(e){ console.error(e); }
+      });
+      card.appendChild(addBtn);
+      grid.appendChild(card);
+    });
+  }
+
+  $('regenVarBtn').addEventListener('click', regenerateVariations);
+  $('addAllVarBtn').addEventListener('click', async ()=>{
+    if(variationsCache.length===0) return;
+    const added = [];
+    for(const vc of variationsCache){
+      const c = makeThumbCanvas(vc.canvas);
+      const obj = addObject(c, vc.recipe);
+      added.push({ c, id: obj.id });
+    }
+    toast('베리에이션 전체를 표본으로 추가했습니다.');
+    // 저장은 백그라운드에서 순차 처리 (UI 블로킹 방지)
+    for(const it of added){
+      try { await savePatternToFolder(it.c, it.id); } catch(e){ console.error(e); }
+    }
+  });
+
+
+  // ================= LAYOUT INTERACTIVE COMPOSITION (RESET ON GEN) =================
+  const compCanvas = $('compCanvas');
+  const cctx = compCanvas.getContext('2d');
+  let compBg = '#0f0f12';
+
+  function paintCompBg(){
+    cctx.clearRect(0,0,compCanvas.width, compCanvas.height);
+    cctx.fillStyle = compBg;
+    cctx.fillRect(0,0,compCanvas.width, compCanvas.height);
+  }
+
+  // 선택된 아이템에 형태를 감싸는 후광(halo)을 그린다.
+  // 원본 캔버스를 사방으로 살짝 오프셋해서 겹쳐 그린 뒤 source-in 으로 색을 칠하면
+  // 알파 모양 그대로 확장(dilate)된 실루엣이 만들어짐. 이 실루엣을 아이템 뒤에 깔면
+  // 실제 형태 가장자리에만 컬러 아웃라인이 남는다.
+  function drawShapeHalo(ctx, item, color, haloPx){
+    const w = item.obj.w * item.scale;
+    const h = item.obj.h * item.scale;
+    const pad = haloPx + 4;
+    const off = document.createElement('canvas');
+    off.width  = Math.ceil(w + pad * 2);
+    off.height = Math.ceil(h + pad * 2);
+    const octx = off.getContext('2d');
+
+    // 8방향으로 오프셋해서 그리면 알파가 haloPx만큼 팽창됨
+    const r = haloPx;
+    const d = haloPx * 0.7071; // 대각선은 √2/2 로 보정
+    const offsets = [
+      [-r, 0], [r, 0], [0, -r], [0, r],
+      [-d, -d], [d, -d], [-d, d], [d, d]
+    ];
+    for(const [dx, dy] of offsets){
+      octx.drawImage(item.obj.canvas, pad + dx, pad + dy, w, h);
+    }
+    // 확장된 실루엣을 지정 색으로 덮기
+    octx.globalCompositeOperation = 'source-in';
+    octx.fillStyle = color;
+    octx.fillRect(0, 0, off.width, off.height);
+
+    // 대상 캔버스 위에 아이템 좌표/회전으로 배치 (아이템 본체 그리기 전에 호출됨)
+    ctx.save();
+    ctx.translate(item.x, item.y);
+    ctx.rotate(item.angle);
+    ctx.drawImage(off, -w/2 - pad, -h/2 - pad);
+    ctx.restore();
+  }
+
+  // 캔버스 좌표 (mx, my) 가 아이템의 실제 형태(알파 > 임계값) 위에 있는지 판정.
+  // 회전을 역보정 → 이미지 로컬 좌표 → 원본 오브젝트 캔버스의 픽셀 알파를 샘플.
+  function itemHitTest(item, mx, my){
+    const dx = mx - item.x;
+    const dy = my - item.y;
+    const cs = Math.cos(item.angle);
+    const sn = Math.sin(item.angle);
+    // R(-angle) 을 (dx, dy) 에 적용
+    const lx =  dx * cs + dy * sn;
+    const ly = -dx * sn + dy * cs;
+    const w = item.obj.w * item.scale;
+    const h = item.obj.h * item.scale;
+    const imgX = lx + w / 2;
+    const imgY = ly + h / 2;
+    if(imgX < 0 || imgY < 0 || imgX >= w || imgY >= h) return false;
+    const sx = Math.floor(imgX / item.scale);
+    const sy = Math.floor(imgY / item.scale);
+    if(sx < 0 || sy < 0 || sx >= item.obj.w || sy >= item.obj.h) return false;
+    // 오브젝트 별로 알파 데이터 캐시 (1회만 getImageData)
+    if(!item.obj._alphaData){
+      try {
+        const octx = item.obj.canvas.getContext('2d');
+        item.obj._alphaData = octx.getImageData(0, 0, item.obj.w, item.obj.h).data;
+      } catch(e){
+        // 크로스 오리진 등으로 샘플 불가 시, 사각형 영역 안이면 히트로 인정 (안전한 폴백)
+        return true;
+      }
+    }
+    const idx = (sy * item.obj.w + sx) * 4 + 3;
+    return item.obj._alphaData[idx] > 20;
+  }
+
+  function renderComposition() {
+    paintCompBg();
+    placedItems.forEach((item, idx) => {
+      const w = item.obj.w * item.scale;
+      const h = item.obj.h * item.scale;
+
+      // 선택된 아이템: 형태 그대로의 후광을 먼저 깔고 → 그 위에 오브젝트 본체를 그림
+      // → 후광의 내부는 오브젝트에 가려지고 가장자리만 남아 실제 형태 아웃라인이 됨.
+      if (idx === selectedItemIdx) {
+        drawShapeHalo(cctx, item, '#ff6a4d', 7);
+      }
+
+      cctx.save();
+      cctx.translate(item.x, item.y);
+      cctx.rotate(item.angle);
+      cctx.drawImage(item.obj.canvas, -w/2, -h/2, w, h);
+      cctx.restore();
+    });
+  }
+
+  compCanvas.addEventListener('pointerdown', e => {
+    const rect = compCanvas.getBoundingClientRect();
+    const scaleX = compCanvas.width / rect.width;
+    const scaleY = compCanvas.height / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top) * scaleY;
+
+    // 위에 있는 레이어부터 검사 (뒤에서 앞 순서), 실제 픽셀 알파로 판정
+    let foundIdx = -1;
+    for (let i = placedItems.length - 1; i >= 0; i--) {
+      if (itemHitTest(placedItems[i], mx, my)) {
+        foundIdx = i;
+        break;
+      }
+    }
+
+    if (foundIdx > -1) {
+      selectedItemIdx = foundIdx;
+      const item = placedItems[foundIdx];
+      isDraggingItem = true;
+      dragStartMouse = { x: mx, y: my };
+      dragStartItemPos = { x: item.x, y: item.y };
+      compCanvas.setPointerCapture(e.pointerId);
+
+      $('compItemEditor').hidden = false;
+      $('itemScale').value = Math.round(item.scale * 100);
+      $('itemScaleVal').textContent = item.scale.toFixed(1) + 'x';
+      $('itemAngle').value = Math.round(item.angle * 180 / Math.PI);
+      $('itemAngleVal').textContent = Math.round(item.angle * 180 / Math.PI) + '°';
+    } else {
+      selectedItemIdx = null;
+      $('compItemEditor').hidden = true;
+    }
+    renderComposition();
+  });
+
+  compCanvas.addEventListener('pointermove', e => {
+    if (!isDraggingItem || selectedItemIdx === null) return;
+    const rect = compCanvas.getBoundingClientRect();
+    const scaleX = compCanvas.width / rect.width;
+    const scaleY = compCanvas.height / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top) * scaleY;
+
+    const dx = mx - dragStartMouse.x;
+    const dy = my - dragStartMouse.y;
+
+    const item = placedItems[selectedItemIdx];
+    item.x = dragStartItemPos.x + dx;
+    item.y = dragStartItemPos.y + dy;
+
+    renderComposition();
+  });
+
+  compCanvas.addEventListener('pointerup', e => {
+    if (isDraggingItem) {
+      isDraggingItem = false;
+      compCanvas.releasePointerCapture(e.pointerId);
+    }
+  });
+
+  $('itemScale').addEventListener('input', e => {
+    if (selectedItemIdx === null) return;
+    const sc = parseInt(e.target.value) / 100;
+    $('itemScaleVal').textContent = sc.toFixed(1) + 'x';
+    const item = placedItems[selectedItemIdx];
+    item.scale = sc;
+    item.r = 0.5 * Math.sqrt((item.obj.w * sc)**2 + (item.obj.h * sc)**2);
+    renderComposition();
+  });
+
+  $('itemAngle').addEventListener('input', e => {
+    if (selectedItemIdx === null) return;
+    const deg = parseInt(e.target.value);
+    $('itemAngleVal').textContent = deg + '°';
+    placedItems[selectedItemIdx].angle = deg * Math.PI / 180;
+    renderComposition();
+  });
+
+  $('sendForwardBtn').addEventListener('click', () => {
+    if (selectedItemIdx === null) return;
+    const item = placedItems.splice(selectedItemIdx, 1)[0];
+    placedItems.push(item);
+    selectedItemIdx = placedItems.length - 1;
+    renderComposition();
+  });
+  $('sendBackwardBtn').addEventListener('click', () => {
+    if (selectedItemIdx === null) return;
+    const item = placedItems.splice(selectedItemIdx, 1)[0];
+    placedItems.unshift(item);
+    selectedItemIdx = 0;
+    renderComposition();
+  });
+  $('deleteItemBtn').addEventListener('click', () => {
+    if (selectedItemIdx === null) return;
+    placedItems.splice(selectedItemIdx, 1);
+    selectedItemIdx = null;
+    $('compItemEditor').hidden = true;
+    renderComposition();
+    toast('선택한 요소가 삭제되었습니다.');
+  });
+
+  // 버튼 유입 연산 시 완벽한 기존 이력 초기화 후 재생성 처리
+  $('genCompBtn').addEventListener('click', () => {
+    if(objects.length === 0){
+      toast('먼저 표본을 하나 이상 등록해주세요.');
+      return;
+    }
+    
+    // 요구사항: 기존 배치 전면 클리어 리셋
+    placedItems.length = 0; 
+    selectedItemIdx = null;
+    $('compItemEditor').hidden = true;
+
+    const n = parseInt($('compCount').value);
+    let mn = parseInt($('scaleMin').value)/100;
+    let mx = parseInt($('scaleMax').value)/100;
+    if(mn > mx){ const t=mn; mn=mx; mx=t; }
+
+    const W = compCanvas.width, H = compCanvas.height;
+
+    for(let i=0; i<n; i++){
+      const obj = objects[Math.floor(Math.random()*objects.length)];
+      const scale = rand(mn, mx);
+      const w = obj.w * scale, h = obj.h * scale;
+      const r = 0.5 * Math.sqrt(w*w + h*h); 
+
+      // 무제한 자유도 오버랩 위치 매핑
+      const x = rand(r * 0.2, W - r * 0.2);
+      const y = rand(r * 0.2, H - r * 0.2);
+      const angle = rand(0, Math.PI * 2);
+
+      placedItems.push({ obj, x, y, scale, angle, r });
+    }
+
+    renderComposition();
+    toast(`구성을 전면 리셋한 후 새로운 랜덤 스택 구조 ${n}개를 배치했습니다.`);
+  });
+
+  document.querySelectorAll('#bgSwatches .swatch[data-bg]').forEach(sw=>{
+    sw.addEventListener('click', ()=>{
+      document.querySelectorAll('#bgSwatches .swatch').forEach(s=>s.classList.remove('active'));
+      sw.classList.add('active');
+      compBg = sw.dataset.bg;
+      $('customBg').value = compBg;
+      renderComposition();
+    });
+  });
+  $('customBg').addEventListener('input', e=>{
+    document.querySelectorAll('#bgSwatches .swatch').forEach(s=>s.classList.remove('active'));
+    compBg = e.target.value;
+    renderComposition();
+  });
+
+  function updateScaleLabel(){
+    const mn = parseInt($('scaleMin').value)/100;
+    const mx = parseInt($('scaleMax').value)/100;
+    $('scaleRangeVal').textContent = `${mn.toFixed(1)}–${mx.toFixed(1)}x`;
+  }
+  $('scaleMin').addEventListener('input', updateScaleLabel);
+  $('scaleMax').addEventListener('input', updateScaleLabel);
+  updateScaleLabel();
+
+  $('compCount').addEventListener('input', e=>{
+    $('compCountVal').textContent = e.target.value;
+  });
+
+  $('clearCompBtn').addEventListener('click', () => {
+    placedItems.length = 0;
+    selectedItemIdx = null;
+    $('compItemEditor').hidden = true;
+    paintCompBg();
+  });
+
+  $('downloadCompBtn').addEventListener('click', ()=>{
+    selectedItemIdx = null; 
+    renderComposition();
+    const link = document.createElement('a');
+    link.download = 'objet-composition.png';
+    link.href = compCanvas.toDataURL('image/png');
+    link.click();
+  });
+
+  paintCompBg();
+  updateStat();
+})();
+</script>
+</body>
+</html>

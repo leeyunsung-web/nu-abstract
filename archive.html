@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARCHIVE — OBJET STUDIO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#17171b;
+    --panel:#1e1e24;
+    --panel-alt:#25252c;
+    --border:#312f39;
+    --border-soft:#28272f;
+    --ink:#ece8de;
+    --ink-dim:#8f8d99;
+    --ink-faint:#5c5a66;
+    --lime:#c6ff3d;
+    --coral:#ff6a4d;
+    --violet:#a48cff;
+    --mono:'IBM Plex Mono', monospace;
+    --display:'Space Grotesk', sans-serif;
+    --body:'IBM Plex Sans KR', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:var(--body);overflow:hidden;height:100%;}
+  ::selection{background:var(--lime);color:#111;}
+
+  /* ---------- topbar ---------- */
+  .topbar{
+    position:fixed;top:0;left:0;right:0;z-index:20;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:18px 26px;
+    background:linear-gradient(180deg, rgba(23,23,27,0.92) 0%, rgba(23,23,27,0.5) 60%, rgba(23,23,27,0) 100%);
+    pointer-events:none;
+  }
+  .topbar > *{pointer-events:auto;}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand-mark{
+    width:34px;height:34px;border:1.5px solid var(--lime);border-radius:3px;
+    display:flex;align-items:center;justify-content:center;color:var(--lime);
+    font-family:var(--display);font-size:15px;flex-shrink:0;
+  }
+  .brand-text h1{font-family:var(--display);font-weight:700;font-size:16px;letter-spacing:0.6px;margin:0;}
+  .brand-text p{font-family:var(--mono);font-size:10.5px;color:var(--ink-dim);margin:2px 0 0;letter-spacing:0.3px;}
+
+  .top-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .chip{
+    font-family:var(--mono);font-size:11px;color:var(--ink-dim);
+    border:1px solid var(--border);padding:7px 11px;border-radius:3px;
+    background:rgba(30,30,36,0.7);backdrop-filter:blur(6px);
+    letter-spacing:0.3px;
+  }
+  .chip .dot{color:var(--lime);}
+  .chip.warn{border-color:var(--coral);color:var(--coral);}
+  .btn{
+    font-family:var(--mono);font-size:11px;padding:8px 12px;border-radius:3px;
+    border:1px solid var(--border);background:rgba(30,30,36,0.7);color:var(--ink);
+    cursor:pointer;letter-spacing:0.3px;backdrop-filter:blur(6px);
+  }
+  .btn:hover{border-color:var(--lime);color:var(--lime);}
+  .btn.violet:hover{border-color:var(--violet);color:var(--violet);}
+  .btn-link{
+    font-family:var(--mono);font-size:11px;padding:8px 12px;border-radius:3px;
+    border:1px solid var(--border);background:rgba(30,30,36,0.7);color:var(--ink);
+    text-decoration:none;letter-spacing:0.3px;backdrop-filter:blur(6px);
+  }
+  .btn-link:hover{border-color:var(--lime);color:var(--lime);}
+
+  /* ---------- stage ---------- */
+  .stage{position:fixed;inset:0;overflow:hidden;background:var(--bg);}
+  .stage::before{
+    content:'';position:absolute;inset:0;pointer-events:none;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(198,255,61,0.04) 0%, transparent 40%),
+      radial-gradient(circle at 85% 80%, rgba(164,140,255,0.05) 0%, transparent 45%),
+      radial-gradient(circle at 60% 40%, rgba(255,106,77,0.03) 0%, transparent 50%);
+    z-index:1;
+  }
+  .collage-item{
+    position:absolute;
+    filter:drop-shadow(0 6px 18px rgba(0,0,0,0.35));
+    transition:transform 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+               opacity 0.8s ease;
+    opacity:0;
+    z-index:5;
+  }
+  .collage-item.enter{opacity:1;}
+  .collage-item:hover{
+    z-index:50;
+    filter:drop-shadow(0 10px 26px rgba(198,255,61,0.25))
+           drop-shadow(0 0 0 1px rgba(198,255,61,0.4));
+  }
+  .collage-item img{
+    display:block;
+    width:100%;height:100%;
+    object-fit:contain;
+    pointer-events:none;
+    user-select:none;
+  }
+
+  /* ---------- footer info ---------- */
+  .footer-info{
+    position:fixed;bottom:0;left:0;right:0;z-index:20;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 26px;
+    background:linear-gradient(0deg, rgba(23,23,27,0.9) 0%, rgba(23,23,27,0.4) 70%, rgba(23,23,27,0) 100%);
+    font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);
+    letter-spacing:0.3px;pointer-events:none;
+  }
+  .footer-info span.accent{color:var(--lime);}
+
+  /* ---------- loading / empty ---------- */
+  .center-msg{
+    position:fixed;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;text-align:center;padding:40px;z-index:15;
+  }
+  .center-msg h2{font-family:var(--display);font-size:26px;font-weight:600;margin:0 0 12px;letter-spacing:0.5px;}
+  .center-msg p{font-family:var(--mono);font-size:12px;color:var(--ink-dim);line-height:1.7;margin:0 0 20px;max-width:520px;}
+  .center-msg .setup-box{
+    border:1px dashed var(--border);border-radius:6px;padding:20px 24px;
+    background:var(--panel);text-align:left;font-family:var(--mono);font-size:11px;
+    color:var(--ink-dim);line-height:1.8;max-width:520px;width:100%;
+  }
+  .center-msg .setup-box code{
+    color:var(--lime);background:rgba(198,255,61,0.08);padding:1px 5px;border-radius:2px;
+  }
+  .center-msg .setup-box input{
+    background:var(--panel-alt);border:1px solid var(--border);color:var(--ink);
+    font-family:var(--mono);font-size:12px;padding:8px 10px;border-radius:3px;outline:none;
+    width:100%;margin-top:5px;
+  }
+  .center-msg .setup-box input:focus{border-color:var(--lime);}
+  .center-msg .setup-btns{display:flex;gap:8px;margin-top:14px;}
+  .center-msg .setup-btns .btn{flex:1;padding:10px 14px;font-size:12px;}
+
+  .loader-dot{
+    display:inline-block;width:8px;height:8px;border-radius:50%;
+    background:var(--lime);margin:0 3px;
+    animation:pulse 1.4s ease-in-out infinite;
+  }
+  .loader-dot:nth-child(2){animation-delay:0.2s;}
+  .loader-dot:nth-child(3){animation-delay:0.4s;}
+  @keyframes pulse{
+    0%,80%,100%{transform:scale(0.6);opacity:0.4;}
+    40%{transform:scale(1);opacity:1;}
+  }
+
+  @media (max-width:640px){
+    .topbar{padding:14px 16px;}
+    .brand-text h1{font-size:14px;}
+    .brand-text p{display:none;}
+    .footer-info{padding:12px 16px;font-size:9.5px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="stage" id="stage"></div>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">◇</div>
+    <div class="brand-text">
+      <h1>OBJET / ARCHIVE</h1>
+      <p>collage of registered objects — random layout</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <div class="chip"><span class="dot">●</span> <span id="statChip">LOADING…</span></div>
+    <button class="btn violet" id="reshuffleBtn">↻ 재배치</button>
+    <a class="btn-link" href="index.html">← 스튜디오</a>
+  </div>
+</div>
+
+<div class="footer-info">
+  <span><span class="accent">OBJET STUDIO</span> · archive layout is regenerated on each visit</span>
+  <span id="repoInfo"></span>
+</div>
+
+<div class="center-msg" id="centerMsg" style="display:none;">
+  <h2>저장소 설정이 필요합니다</h2>
+  <p>이 페이지는 GitHub 저장소에서 등록된 오브젝트 PNG를 읽어와 랜덤으로 배치합니다.<br>아래에 <b>공개 저장소</b>의 정보를 입력하세요. (Public repo는 토큰 없이 읽기 가능)</p>
+  <div class="setup-box">
+    <div style="margin-bottom:10px;">Owner (사용자명)<input type="text" id="setupOwner" placeholder="예: myusername"></div>
+    <div style="margin-bottom:10px;">Repository (저장소)<input type="text" id="setupRepo" placeholder="예: objet-studio"></div>
+    <div style="margin-bottom:10px;">Path (폴더 경로)<input type="text" id="setupPath" value="gallery" placeholder="gallery"></div>
+    <div style="margin-bottom:10px;">Branch<input type="text" id="setupBranch" value="main" placeholder="main"></div>
+    <div style="margin-top:10px;color:var(--ink-faint);font-size:10px;line-height:1.6;">
+      * 비공개 저장소인 경우 <code>스튜디오</code> 페이지에서 GitHub 연결 설정을 먼저 진행하세요. 저장된 토큰을 재사용합니다.
+    </div>
+    <div class="setup-btns">
+      <button class="btn violet" id="setupSave">저장 & 로드</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const $ = id => document.getElementById(id);
+  const GH_STORAGE_KEY = 'objet_studio_gh_config';       // 스튜디오와 공유 (토큰 재사용)
+  const ARCHIVE_STORAGE_KEY = 'objet_studio_archive_cfg'; // 아카이브 전용 (owner/repo 만)
+
+  const stage = $('stage');
+
+  // ---------------- config ----------------
+  function loadConfig(){
+    // 아카이브 전용 설정 우선 → 없으면 스튜디오 설정에서 owner/repo 상속
+    let cfg = null;
+    try { cfg = JSON.parse(localStorage.getItem(ARCHIVE_STORAGE_KEY)); } catch(e){}
+    if(!cfg || !cfg.owner || !cfg.repo){
+      let gh = null;
+      try { gh = JSON.parse(localStorage.getItem(GH_STORAGE_KEY)); } catch(e){}
+      if(gh && gh.owner && gh.repo){
+        cfg = {
+          owner: gh.owner, repo: gh.repo,
+          path: gh.path || 'gallery',
+          branch: gh.branch || 'main'
+        };
+      }
+    }
+    return cfg;
+  }
+  function saveConfig(cfg){
+    localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(cfg));
+  }
+  function loadToken(){
+    // 스튜디오 설정에 저장된 토큰 (있으면 비공개 저장소 접근 가능)
+    try {
+      const gh = JSON.parse(localStorage.getItem(GH_STORAGE_KEY));
+      return gh && gh.token ? gh.token : null;
+    } catch(e){ return null; }
+  }
+
+  // ---------------- GitHub API ----------------
+  async function ghGet(url){
+    const token = loadToken();
+    const headers = {
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28'
+    };
+    if(token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(url, { headers });
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      throw new Error(`API ${res.status}: ${err.message || res.statusText}`);
+    }
+    return res.json();
+  }
+
+  // 지정된 경로 아래의 모든 이미지 파일을 재귀적으로 수집
+  async function listAllImages(cfg){
+    const rootPath = (cfg.path || 'gallery').replace(/^\/+|\/+$/g,'');
+    const files = [];
+
+    async function walk(path){
+      const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(path)}?ref=${encodeURIComponent(cfg.branch || 'main')}`;
+      let items;
+      try { items = await ghGet(url); }
+      catch(e){
+        // 폴더가 없을 수 있음 (아직 커밋 전) → 조용히 빈 배열
+        if(String(e.message).includes('404')) return;
+        throw e;
+      }
+      if(!Array.isArray(items)) return;
+      for(const it of items){
+        if(it.type === 'dir'){
+          await walk(it.path);
+        } else if(it.type === 'file' && /\.(png|jpe?g|webp|gif)$/i.test(it.name)){
+          files.push({
+            name: it.name,
+            path: it.path,
+            downloadUrl: it.download_url,
+            size: it.size
+          });
+        }
+      }
+    }
+
+    await walk(rootPath);
+    return files;
+  }
+
+  // ---------------- collage layout ----------------
+  function shuffle(arr){
+    const a = arr.slice();
+    for(let i = a.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+  const rand = (a, b) => a + Math.random() * (b - a);
+
+  // 랜덤 콜라주 배치 (중복 없이 각 이미지 1회씩)
+  function placeCollage(images){
+    stage.innerHTML = '';
+    if(images.length === 0) return;
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const shuffled = shuffle(images);
+
+    // 개수에 따라 크기 범위를 조절 - 많으면 작게, 적으면 크게
+    const n = shuffled.length;
+    let sizeMin, sizeMax;
+    if(n <= 6){        sizeMin = vw * 0.18; sizeMax = vw * 0.32; }
+    else if(n <= 15){  sizeMin = vw * 0.12; sizeMax = vw * 0.24; }
+    else if(n <= 30){  sizeMin = vw * 0.08; sizeMax = vw * 0.18; }
+    else if(n <= 60){  sizeMin = vw * 0.06; sizeMax = vw * 0.14; }
+    else {             sizeMin = vw * 0.05; sizeMax = vw * 0.11; }
+
+    // 모바일 대응: 세로 화면일 땐 조금 더 여유
+    if(vw < vh) { sizeMin *= 0.9; sizeMax *= 0.9; }
+
+    shuffled.forEach((img, i) => {
+      const size = rand(sizeMin, sizeMax);
+      const el = document.createElement('div');
+      el.className = 'collage-item';
+
+      // 위치: 화면 밖으로 조금 벗어나도 OK (자연스러운 콜라주 감성)
+      const x = rand(-size * 0.15, vw - size * 0.85);
+      const y = rand(-size * 0.15, vh - size * 0.85);
+      const rot = rand(-25, 25);
+      const scale = rand(0.94, 1.06);
+      const z = Math.floor(rand(1, 100));
+
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+      el.style.width = size + 'px';
+      el.style.height = size + 'px';
+      el.style.transform = `rotate(${rot}deg) scale(${scale})`;
+      el.style.zIndex = z;
+
+      const im = document.createElement('img');
+      im.src = img.downloadUrl;
+      im.alt = img.name;
+      im.loading = 'lazy';
+      el.appendChild(im);
+
+      stage.appendChild(el);
+
+      // 등장 애니메이션 (약간의 시차)
+      setTimeout(() => el.classList.add('enter'), 30 + i * 18);
+    });
+  }
+
+  // ---------------- main flow ----------------
+  let cachedImages = null;
+
+  async function init(){
+    const cfg = loadConfig();
+    if(!cfg || !cfg.owner || !cfg.repo){
+      $('centerMsg').style.display = 'flex';
+      $('statChip').textContent = 'SETUP REQUIRED';
+      return;
+    }
+    $('repoInfo').textContent = `${cfg.owner}/${cfg.repo} · ${cfg.path || 'gallery'}/`;
+    $('statChip').innerHTML = 'FETCHING <span class="loader-dot"></span><span class="loader-dot"></span><span class="loader-dot"></span>';
+
+    try {
+      cachedImages = await listAllImages(cfg);
+      if(cachedImages.length === 0){
+        $('statChip').textContent = 'EMPTY';
+        showEmpty(cfg);
+        return;
+      }
+      $('statChip').textContent = `${cachedImages.length} OBJECTS`;
+      placeCollage(cachedImages);
+    } catch(e){
+      console.error(e);
+      $('statChip').textContent = 'ERROR';
+      $('statChip').parentElement.classList.add('warn');
+      showError(e.message, cfg);
+    }
+  }
+
+  function showEmpty(cfg){
+    const m = $('centerMsg');
+    m.innerHTML = `
+      <h2>아카이브가 비어 있습니다</h2>
+      <p><b>${cfg.owner}/${cfg.repo}</b>의 <code style="color:var(--lime);">${cfg.path || 'gallery'}/</code> 폴더에 아직 등록된 오브젝트가 없습니다.<br>스튜디오에서 그림을 그리고 등록하면 여기에 나타납니다.</p>
+      <div class="setup-btns" style="max-width:320px;">
+        <a class="btn-link" style="flex:1;text-align:center;" href="index.html">스튜디오로 이동</a>
+        <button class="btn violet" style="flex:1;" onclick="location.reload()">↻ 새로고침</button>
+      </div>
+    `;
+    m.style.display = 'flex';
+  }
+
+  function showError(msg, cfg){
+    const m = $('centerMsg');
+    m.innerHTML = `
+      <h2 style="color:var(--coral);">불러오기 실패</h2>
+      <p>${msg}</p>
+      <p style="color:var(--ink-faint);">저장소가 비공개인 경우 <b>스튜디오 페이지에서 GitHub 연결 설정</b>을 진행해 토큰을 저장해주세요.<br>공개 저장소라면 owner/repo 정보를 확인해주세요.</p>
+      <div class="setup-btns" style="max-width:400px;">
+        <button class="btn violet" style="flex:1;" id="reconfigBtn">저장소 재설정</button>
+        <a class="btn-link" style="flex:1;text-align:center;" href="index.html">스튜디오로 이동</a>
+      </div>
+    `;
+    m.style.display = 'flex';
+    $('reconfigBtn').addEventListener('click', ()=>{
+      localStorage.removeItem(ARCHIVE_STORAGE_KEY);
+      location.reload();
+    });
+  }
+
+  // ---------------- events ----------------
+  $('reshuffleBtn').addEventListener('click', ()=>{
+    if(cachedImages && cachedImages.length){
+      placeCollage(cachedImages);
+    } else {
+      init();
+    }
+  });
+
+  $('setupSave').addEventListener('click', ()=>{
+    const cfg = {
+      owner:  $('setupOwner').value.trim(),
+      repo:   $('setupRepo').value.trim(),
+      path:   $('setupPath').value.trim() || 'gallery',
+      branch: $('setupBranch').value.trim() || 'main'
+    };
+    if(!cfg.owner || !cfg.repo){
+      alert('owner와 repo를 입력해주세요.');
+      return;
+    }
+    saveConfig(cfg);
+    $('centerMsg').style.display = 'none';
+    init();
+  });
+
+  // 창 크기 변경 시 자동 재배치 (디바운스)
+  let resizeTimer;
+  window.addEventListener('resize', ()=>{
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(()=>{
+      if(cachedImages && cachedImages.length) placeCollage(cachedImages);
+    }, 300);
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>
