@@ -1,229 +1,232 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ARCHIVE — NU-ABSTRACT</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>NU-ABSTRACT ARCHIVE</title>
 <style>
-  :root{
-    /* 밝고 세련된 모던 UI 컬러 팔레트 */
-    --bg:#f7f7f9;
-    --panel:#ffffff;
-    --panel-alt:#f0f0f3;
-    --border:#e2e2e8;
-    --border-soft:#f0f0f3;
-    --ink:#111111;
-    --ink-dim:#666666;
-    --ink-faint:#999999;
-    --lime:#b2e622;
-    --coral:#ff5555;
-    --violet:#8b5cf6;
-    --mono:'IBM Plex Mono', monospace;
-    --display:'Space Grotesk', sans-serif;
-    --body:'IBM Plex Sans KR', sans-serif;
+  :root {
+    /* Apple/iOS Style Grayscale Theme */
+    --bg: #f5f5f7;
+    --panel: #ffffff;
+    --panel-alt: #f5f5f7;
+    --border: #d2d2d7;
+    --border-soft: #e5e5ea;
+    --ink: #1d1d1f;
+    --ink-dim: #86868b;
+    --ink-faint: #aeaeb2;
+    --accent: #1d1d1f;
+    --danger: #ff3b30;
+    
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
-  *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:var(--body);overflow:hidden;height:100%;}
-  ::selection{background:var(--lime);color:#111;}
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: var(--font-sans); overflow: hidden; height: 100%; -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--ink-dim); color: #fff; }
 
   /* ---------- topbar ---------- */
-  .topbar{
-    position:fixed;top:0;left:0;right:0;z-index:20;
-    display:flex;align-items:center;justify-content:space-between;
-    padding:18px 26px;
-    background:linear-gradient(180deg, rgba(247,247,249,0.95) 0%, rgba(247,247,249,0.6) 60%, rgba(247,247,249,0) 100%);
-    pointer-events:none;
+  .topbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 26px;
+    background: linear-gradient(180deg, rgba(245,245,247,0.95) 0%, rgba(245,245,247,0.6) 60%, rgba(245,245,247,0) 100%);
+    pointer-events: none;
   }
-  .topbar > *{pointer-events:auto;}
-  .brand{display:flex;align-items:center;gap:12px;}
-  .brand-mark{
-    width:34px;height:34px;border:1.5px solid var(--ink);border-radius:3px;
-    display:flex;align-items:center;justify-content:center;color:var(--ink);
-    font-family:var(--display);font-size:15px;flex-shrink:0;
-  }
-  .brand-text h1{font-family:var(--display);font-weight:700;font-size:16px;letter-spacing:0.6px;margin:0;}
-  .brand-text p{font-family:var(--mono);font-size:10.5px;color:var(--ink-dim);margin:2px 0 0;letter-spacing:0.3px;}
+  .topbar > * { pointer-events: auto; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-text h1 { font-weight: 700; font-size: 18px; letter-spacing: -0.3px; margin: 0; }
+  .brand-text p { font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); margin: 2px 0 0; }
 
-  .top-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
-  .chip{
-    font-family:var(--mono);font-size:11px;color:var(--ink-dim);
-    border:1px solid var(--border);padding:7px 11px;border-radius:3px;
-    background:rgba(255,255,255,0.7);backdrop-filter:blur(6px);
-    letter-spacing:0.3px;
+  .top-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .chip {
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim);
+    border: 1px solid var(--border); padding: 7px 12px; border-radius: 8px;
+    background: rgba(255,255,255,0.7); backdrop-filter: blur(8px);
+    letter-spacing: 0.3px; font-weight: 500;
   }
-  .chip .dot{color:var(--violet);}
-  .chip.warn{border-color:var(--coral);color:var(--coral);}
-  .btn{
-    font-family:var(--mono);font-size:11px;padding:8px 12px;border-radius:3px;
-    border:1px solid var(--border);background:rgba(255,255,255,0.7);color:var(--ink);
-    cursor:pointer;letter-spacing:0.3px;backdrop-filter:blur(6px);
-    transition: all 0.2s;
+  .chip .dot { color: var(--ink); }
+  .btn {
+    font-family: var(--font-mono); font-size: 11px; padding: 8px 14px; border-radius: 8px;
+    border: 1px solid var(--border); background: rgba(255,255,255,0.7); color: var(--ink);
+    cursor: pointer; font-weight: 500; backdrop-filter: blur(8px);
+    transition: all 0.15s;
   }
-  .btn:hover{border-color:var(--ink); background:var(--ink); color:#fff;}
-  .btn-link{
-    font-family:var(--mono);font-size:11px;padding:8px 12px;border-radius:3px;
-    border:1px solid var(--border);background:rgba(255,255,255,0.7);color:var(--ink);
-    text-decoration:none;letter-spacing:0.3px;backdrop-filter:blur(6px);
-    transition: all 0.2s;
+  .btn:hover { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .btn-link {
+    font-family: var(--font-mono); font-size: 11px; padding: 8px 14px; border-radius: 8px;
+    border: 1px solid var(--border); background: rgba(255,255,255,0.7); color: var(--ink);
+    text-decoration: none; font-weight: 500; backdrop-filter: blur(8px);
+    transition: all 0.15s;
   }
-  .btn-link:hover{border-color:var(--ink); background:var(--ink); color:#fff;}
+  .btn-link:hover { background: var(--ink); color: #fff; border-color: var(--ink); }
 
   /* ---------- background color picker ---------- */
-  .bg-picker{
-    display:flex;align-items:center;gap:6px;
-    border:1px solid var(--border);padding:5px 8px;border-radius:3px;
-    background:rgba(255,255,255,0.7);backdrop-filter:blur(6px);
+  .bg-picker {
+    display: flex; align-items: center; gap: 6px;
+    border: 1px solid var(--border); padding: 6px 10px; border-radius: 8px;
+    background: rgba(255,255,255,0.7); backdrop-filter: blur(8px);
   }
-  .bg-picker .label{font-family:var(--mono);font-size:10px;color:var(--ink-dim);letter-spacing:0.3px;margin-right:2px;}
-  .bg-swatch{
-    width:18px;height:18px;border-radius:50%;cursor:pointer;
-    border:2px solid transparent;box-shadow:0 0 0 1px var(--border);
-    padding:0;
+  .bg-picker .label { font-family: var(--font-mono); font-size: 10px; color: var(--ink-dim); margin-right: 2px; }
+  .bg-swatch {
+    width: 20px; height: 20px; border-radius: 50%; cursor: pointer;
+    border: 2px solid transparent; box-shadow: 0 0 0 1px var(--border); padding: 0;
   }
-  .bg-swatch.active{border-color:var(--ink);}
-  .bg-swatch-custom{
-    position:relative;overflow:hidden;
-    background:conic-gradient(red,yellow,lime,cyan,blue,magenta,red);
-  }
-  .bg-swatch-custom input[type=color]{
-    position:absolute;top:-4px;left:-4px;width:30px;height:30px;
-    border:none;padding:0;cursor:pointer;opacity:0;
+  .bg-swatch.active { border-color: #fff; box-shadow: 0 0 0 2px var(--ink); }
+  .bg-swatch-custom { position: relative; overflow: hidden; }
+  .bg-swatch-custom input[type=color] {
+    position: absolute; top: -4px; left: -4px; width: 30px; height: 30px;
+    border: none; padding: 0; cursor: pointer; opacity: 0;
   }
 
-  /* ---------- stage ---------- */
-  .stage{position:fixed;inset:0;overflow:hidden;background:var(--bg);}
-  .stage::before{
-    content:'';position:absolute;inset:0;pointer-events:none;
-    background:
-      radial-gradient(circle at 15% 20%, rgba(139,92,246,0.02) 0%, transparent 40%),
-      radial-gradient(circle at 85% 80%, rgba(139,92,246,0.03) 0%, transparent 45%);
-    z-index:1;
+  /* ---------- stage & items ---------- */
+  .stage { position: fixed; inset: 0; overflow: hidden; background: var(--bg); touch-action: none; }
+  .collage-item {
+    position: absolute;
+    /* Interactivity for floating UI logic */
+    pointer-events: auto; user-select: none;
+    cursor: grab;
+    transform-origin: center center;
+    opacity: 0; transition: opacity 0.6s ease; /* No transform transition to allow smooth dragging */
+    z-index: 5;
   }
-  .collage-item{
-    position:absolute;
-    /* 그림자 제거 */
-    transition:transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s ease;
-    opacity:0;
-    z-index:5;
+  .collage-item:active { cursor: grabbing; }
+  .collage-item.enter { opacity: 1; }
+  .collage-item.selected {
+    z-index: 50; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.1));
   }
-  .collage-item.enter{opacity:1;}
-  .collage-item:hover{
-    z-index:50;
-    transform: scale(1.05) !important; /* 약간의 확대 효과만 유지 */
+  .collage-item img {
+    display: block; width: 100%; height: 100%; object-fit: contain;
+    pointer-events: none; user-select: none; image-rendering: pixelated;
   }
-  .collage-item img{
-    display:block;
-    width:100%;height:100%;
-    object-fit:contain;
-    pointer-events:none;
-    user-select:none;
+
+  /* ---------- float menu (overlaid when selected) ---------- */
+  .float-menu {
+    position: absolute; z-index: 100;
+    background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
+    border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px; width: 220px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    display: flex; flex-direction: column; gap: 12px;
+    transform: translate(-50%, calc(-100% - 20px));
+    pointer-events: auto;
   }
+  .float-menu::after {
+    content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%) rotate(45deg);
+    width: 10px; height: 10px; background: rgba(255,255,255,0.95); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  }
+  .fm-header { font-size: 13px; font-weight: 600; color: var(--ink); text-align: center; border-bottom: 1px solid var(--border-soft); padding-bottom: 8px; }
+  .fm-row { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); }
+  .fm-row input[type=range] { flex: 1; accent-color: var(--ink); }
+  .fm-btns { display: flex; gap: 6px; margin-top: 4px; }
+  .fm-btns button {
+    flex: 1; padding: 8px; font-family: var(--font-mono); font-size: 11px;
+    border-radius: 6px; border: none; cursor: pointer; font-weight: 500;
+  }
+  .btn-fm-close { background: var(--border-soft); color: var(--ink); }
+  .btn-fm-close:hover { background: var(--border); }
+  .btn-fm-del { background: rgba(255,59,48,0.1); color: var(--danger); }
+  .btn-fm-del:hover { background: rgba(255,59,48,0.2); }
 
   /* ---------- footer info ---------- */
-  .footer-info{
-    position:fixed;bottom:0;left:0;right:0;z-index:20;
-    display:flex;align-items:center;justify-content:space-between;
-    padding:14px 26px;
-    background:linear-gradient(0deg, rgba(247,247,249,0.95) 0%, rgba(247,247,249,0.5) 70%, rgba(247,247,249,0) 100%);
-    font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);
-    letter-spacing:0.3px;pointer-events:none;
+  .footer-info {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: space-between; padding: 14px 26px;
+    background: linear-gradient(0deg, rgba(245,245,247,0.95) 0%, rgba(245,245,247,0.5) 70%, rgba(245,245,247,0) 100%);
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-faint); pointer-events: none;
   }
-  .footer-info span.accent{color:var(--ink); font-weight: 500;}
+  .footer-info span.accent { color: var(--ink); font-weight: 500; }
 
   /* ---------- loading / empty ---------- */
-  .center-msg{
-    position:fixed;inset:0;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;text-align:center;padding:40px;z-index:15;
+  .center-msg {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; padding: 40px; z-index: 15;
   }
-  .center-msg h2{font-family:var(--display);font-size:26px;font-weight:600;margin:0 0 12px;letter-spacing:0.5px;}
-  .center-msg p{font-family:var(--mono);font-size:12px;color:var(--ink-dim);line-height:1.7;margin:0 0 20px;max-width:520px;}
-  .center-msg .setup-box{
-    border:1px dashed var(--border);border-radius:6px;padding:20px 24px;
-    background:var(--panel);text-align:left;font-family:var(--mono);font-size:11px;
-    color:var(--ink-dim);line-height:1.8;max-width:520px;width:100%;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+  .center-msg h2 { font-size: 24px; font-weight: 600; margin: 0 0 12px; letter-spacing: -0.5px; }
+  .center-msg p { font-family: var(--font-mono); font-size: 12px; color: var(--ink-dim); line-height: 1.7; margin: 0 0 20px; max-width: 520px; }
+  .setup-box {
+    border: 1px solid var(--border); border-radius: 12px; padding: 24px;
+    background: var(--panel); text-align: left; font-family: var(--font-mono); font-size: 11px;
+    color: var(--ink-dim); line-height: 1.8; max-width: 520px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.05);
   }
-  .center-msg .setup-box code{
-    color:var(--violet);background:rgba(139,92,246,0.08);padding:1px 5px;border-radius:2px;
+  .setup-box input {
+    background: var(--panel-alt); border: 1px solid var(--border); color: var(--ink);
+    font-family: var(--font-mono); font-size: 12px; padding: 10px 12px; border-radius: 8px; outline: none; width: 100%; margin-top: 6px;
   }
-  .center-msg .setup-box input{
-    background:var(--panel-alt);border:1px solid var(--border);color:var(--ink);
-    font-family:var(--mono);font-size:12px;padding:8px 10px;border-radius:3px;outline:none;
-    width:100%;margin-top:5px;
-  }
-  .center-msg .setup-box input:focus{border-color:var(--violet);}
-  .center-msg .setup-btns{display:flex;gap:8px;margin-top:14px;}
-  .center-msg .setup-btns .btn{flex:1;padding:10px 14px;font-size:12px;}
+  .setup-box input:focus { border-color: var(--ink); }
+  .setup-btns { display: flex; gap: 8px; margin-top: 18px; }
+  .setup-btns .btn { flex: 1; padding: 12px; font-size: 12px; background: var(--ink); color: #fff; border-color: var(--ink); }
 
-  .loader-dot{
-    display:inline-block;width:8px;height:8px;border-radius:50%;
-    background:var(--violet);margin:0 3px;
-    animation:pulse 1.4s ease-in-out infinite;
+  .loader-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--ink-dim); margin: 0 3px; animation: pulse 1.4s ease-in-out infinite;
   }
-  .loader-dot:nth-child(2){animation-delay:0.2s;}
-  .loader-dot:nth-child(3){animation-delay:0.4s;}
-  @keyframes pulse{
-    0%,80%,100%{transform:scale(0.6);opacity:0.4;}
-    40%{transform:scale(1);opacity:1;}
-  }
+  .loader-dot:nth-child(2) { animation-delay: 0.2s; }
+  .loader-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes pulse { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
 
-  @media (max-width:640px){
-    .topbar{padding:14px 16px;}
-    .brand-text h1{font-size:14px;}
-    .brand-text p{display:none;}
-    .footer-info{padding:12px 16px;font-size:9.5px;}
-  }
 </style>
 </head>
 <body>
 
 <div class="stage" id="stage"></div>
 
+<!-- Overlaid Menu Template -->
+<div id="floatMenu" class="float-menu" style="display:none;">
+  <div class="fm-header">ADJUST ELEMENT</div>
+  <div class="fm-row">
+    <span>Scale</span>
+    <input type="range" id="fmScale" min="0.2" max="4" step="0.05">
+  </div>
+  <div class="fm-row">
+    <span>Rotate</span>
+    <input type="range" id="fmRotate" min="-180" max="180" step="1">
+  </div>
+  <div class="fm-btns">
+    <button class="btn-fm-del" id="fmDelete">Delete</button>
+    <button class="btn-fm-close" id="fmClose">Close</button>
+  </div>
+</div>
+
 <div class="topbar">
   <div class="brand">
-    <div class="brand-mark">◇</div>
     <div class="brand-text">
       <h1>NU-ABSTRACT / ARCHIVE</h1>
-      <p>collage of registered objects — random layout</p>
+      <p>Click element to edit size & rotation</p>
     </div>
   </div>
   <div class="top-actions">
     <div class="bg-picker" id="bgPicker">
       <span class="label">BG</span>
-      <button class="bg-swatch active" data-bg="#f7f7f9" style="background:#f7f7f9" title="라이트 그레이"></button>
-      <button class="bg-swatch" data-bg="#ffffff" style="background:#ffffff" title="화이트"></button>
-      <button class="bg-swatch" data-bg="#efe9db" style="background:#efe9db" title="크림"></button>
-      <button class="bg-swatch" data-bg="#17171b" style="background:#17171b" title="다크"></button>
-      <label class="bg-swatch bg-swatch-custom" title="커스텀 컬러">
-        <input type="color" id="customBg" value="#f7f7f9">
+      <button class="bg-swatch active" data-bg="#f5f5f7" style="background:#f5f5f7" title="Light Gray"></button>
+      <button class="bg-swatch" data-bg="#ffffff" style="background:#ffffff" title="White"></button>
+      <button class="bg-swatch" data-bg="#e8e8ed" style="background:#e8e8ed" title="Mid Gray"></button>
+      <button class="bg-swatch" data-bg="#1d1d1f" style="background:#1d1d1f" title="Dark"></button>
+      <label class="bg-swatch bg-swatch-custom" title="Custom Color">
+        <input type="color" id="customBg" value="#f5f5f7">
       </label>
     </div>
     <div class="chip"><span class="dot">●</span> <span id="statChip">LOADING…</span></div>
-    <button class="btn" id="reshuffleBtn">↻ 재배치</button>
-    <a class="btn-link" href="index.html">← 스튜디오</a>
+    <button class="btn" id="reshuffleBtn">↻ RESHUFFLE</button>
+    <a class="btn-link" href="index.html">← STUDIO</a>
   </div>
 </div>
 
 <div class="footer-info">
-  <span><span class="accent">NU-ABSTRACT</span> · archive layout is regenerated on each visit</span>
+  <span><span class="accent">NU-ABSTRACT</span> · Archive Layout Engine</span>
   <span id="repoInfo"></span>
 </div>
 
 <div class="center-msg" id="centerMsg" style="display:none;">
-  <h2>저장소 설정이 필요합니다</h2>
-  <p>이 페이지는 GitHub 저장소에서 등록된 오브젝트 PNG를 읽어와 랜덤으로 배치합니다.<br>아래에 <b>공개 저장소</b>의 정보를 입력하세요. (Public repo는 토큰 없이 읽기 가능)</p>
+  <h2>REPOSITORY CONFIGURATION</h2>
+  <p>This page loads registered PNGs from a public GitHub repository.<br>Enter your public repo details below.</p>
   <div class="setup-box">
-    <div style="margin-bottom:10px;">Owner (사용자명)<input type="text" id="setupOwner" placeholder="예: myusername"></div>
-    <div style="margin-bottom:10px;">Repository (저장소)<input type="text" id="setupRepo" placeholder="예: nu-abstract"></div>
-    <div style="margin-bottom:10px;">Path (폴더 경로)<input type="text" id="setupPath" value="gallery" placeholder="gallery"></div>
-    <div style="margin-bottom:10px;">Branch<input type="text" id="setupBranch" value="main" placeholder="main"></div>
-    <div style="margin-top:10px;color:var(--ink-faint);font-size:10px;line-height:1.6;">
-      * 비공개 저장소인 경우 <code>스튜디오</code> 페이지에서 GitHub 연결 설정을 먼저 진행하세요. 저장된 토큰을 재사용합니다.
-    </div>
+    <div style="margin-bottom:12px;">Owner<input type="text" id="setupOwner" placeholder="e.g., myusername"></div>
+    <div style="margin-bottom:12px;">Repository<input type="text" id="setupRepo" placeholder="e.g., nu-abstract"></div>
+    <div style="margin-bottom:12px;">Path<input type="text" id="setupPath" value="gallery" placeholder="gallery"></div>
+    <div style="margin-bottom:12px;">Branch<input type="text" id="setupBranch" value="main" placeholder="main"></div>
     <div class="setup-btns">
-      <button class="btn" id="setupSave">저장 & 로드</button>
+      <button class="btn" id="setupSave">SAVE & LOAD</button>
     </div>
   </div>
 </div>
@@ -238,7 +241,9 @@
   const BG_STORAGE_KEY = 'objet_studio_archive_bg';       
 
   const stage = $('stage');
+  const floatMenu = $('floatMenu');
 
+  // Background logic
   function applyBackground(color){
     document.body.style.background = color;
     document.querySelector('.stage').style.background = color;
@@ -265,6 +270,7 @@
     saveBackground(e.target.value);
   });
 
+  // Config logic
   function loadConfig(){
     let cfg = null;
     try { cfg = JSON.parse(localStorage.getItem(ARCHIVE_STORAGE_KEY)); } catch(e){}
@@ -272,11 +278,7 @@
       let gh = null;
       try { gh = JSON.parse(localStorage.getItem(GH_STORAGE_KEY)); } catch(e){}
       if(gh && gh.owner && gh.repo){
-        cfg = {
-          owner: gh.owner, repo: gh.repo,
-          path: gh.path || 'gallery',
-          branch: gh.branch || 'main'
-        };
+        cfg = { owner: gh.owner, repo: gh.repo, path: gh.path || 'gallery', branch: gh.branch || 'main' };
       }
     }
     return cfg;
@@ -291,12 +293,10 @@
     } catch(e){ return null; }
   }
 
+  // GitHub API
   async function ghGet(url){
     const token = loadToken();
-    const headers = {
-      'Accept': 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28'
-    };
+    const headers = { 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
     if(token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(url, { headers });
     if(!res.ok){
@@ -314,25 +314,17 @@
       const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(path)}?ref=${encodeURIComponent(cfg.branch || 'main')}`;
       let items;
       try { items = await ghGet(url); }
-      catch(e){
-        if(String(e.message).includes('404')) return;
-        throw e;
-      }
+      catch(e){ if(String(e.message).includes('404')) return; throw e; }
+      
       if(!Array.isArray(items)) return;
       for(const it of items){
         if(it.type === 'dir'){
           await walk(it.path);
         } else if(it.type === 'file' && /\.(png|jpe?g|webp|gif)$/i.test(it.name)){
-          files.push({
-            name: it.name,
-            path: it.path,
-            downloadUrl: it.download_url,
-            size: it.size
-          });
+          files.push({ name: it.name, downloadUrl: it.download_url });
         }
       }
     }
-
     await walk(rootPath);
     return files;
   }
@@ -347,8 +339,15 @@
   }
   const rand = (a, b) => a + Math.random() * (b - a);
 
+  // ---------- DOM Interactive State ----------
+  let itemsData = []; // To store states (x, y, scale, rotate)
+  let zCounter = 50;
+  let activeItemObj = null; 
+
   function placeCollage(images){
     stage.innerHTML = '';
+    floatMenu.style.display = 'none';
+    itemsData = [];
     if(images.length === 0) return;
 
     const vw = window.innerWidth;
@@ -362,7 +361,6 @@
     else if(n <= 30){  sizeMin = vw * 0.08; sizeMax = vw * 0.18; }
     else if(n <= 60){  sizeMin = vw * 0.06; sizeMax = vw * 0.14; }
     else {             sizeMin = vw * 0.05; sizeMax = vw * 0.11; }
-
     if(vw < vh) { sizeMin *= 0.9; sizeMax *= 0.9; }
 
     shuffled.forEach((img, i) => {
@@ -370,33 +368,121 @@
       const el = document.createElement('div');
       el.className = 'collage-item';
 
-      const x = rand(-size * 0.15, vw - size * 0.85);
-      const y = rand(-size * 0.15, vh - size * 0.85);
-      const rot = rand(-25, 25);
-      const scale = rand(0.94, 1.06);
-      const z = Math.floor(rand(1, 100));
-
-      el.style.left = x + 'px';
-      el.style.top = y + 'px';
+      const obj = {
+        el: el,
+        x: rand(-size * 0.15, vw - size * 0.85),
+        y: rand(-size * 0.15, vh - size * 0.85),
+        scale: rand(0.94, 1.06),
+        rotate: rand(-25, 25),
+        width: size,
+        height: size
+      };
+      itemsData.push(obj);
+      updateTransform(obj);
       el.style.width = size + 'px';
       el.style.height = size + 'px';
-      el.style.transform = `rotate(${rot}deg) scale(${scale})`;
-      el.style.zIndex = z;
-
+      
       const im = document.createElement('img');
       im.src = img.downloadUrl;
-      im.alt = img.name;
       im.loading = 'lazy';
       el.appendChild(im);
-
       stage.appendChild(el);
 
       setTimeout(() => el.classList.add('enter'), 30 + i * 18);
+
+      // Mouse/Touch Interaction
+      el.addEventListener('pointerdown', (e) => {
+        if(e.button !== 0 && e.pointerType === 'mouse') return; // Left click only
+        e.preventDefault();
+        selectItem(obj);
+        
+        let startX = e.clientX;
+        let startY = e.clientY;
+        let initX = obj.x;
+        let initY = obj.y;
+
+        function onMove(me){
+          obj.x = initX + (me.clientX - startX);
+          obj.y = initY + (me.clientY - startY);
+          updateTransform(obj);
+          positionMenu(obj);
+        }
+        function onUp(){
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', onUp);
+        }
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+      });
     });
   }
 
-  let cachedImages = null;
+  function updateTransform(obj){
+    obj.el.style.transform = `translate(${obj.x}px, ${obj.y}px) rotate(${obj.rotate}deg) scale(${obj.scale})`;
+  }
 
+  // Floating Menu Logic
+  function selectItem(obj) {
+    if(activeItemObj && activeItemObj !== obj) {
+      activeItemObj.el.classList.remove('selected');
+    }
+    activeItemObj = obj;
+    zCounter++;
+    obj.el.style.zIndex = zCounter;
+    obj.el.classList.add('selected');
+
+    // Init float menu values
+    $('fmScale').value = obj.scale;
+    $('fmRotate').value = obj.rotate;
+    
+    floatMenu.style.display = 'flex';
+    positionMenu(obj);
+  }
+
+  function positionMenu(obj) {
+    // Menu sits centered above the item
+    const centerX = obj.x + (obj.width / 2);
+    const topY = obj.y;
+    floatMenu.style.left = centerX + 'px';
+    floatMenu.style.top = topY + 'px';
+  }
+
+  function closeMenu(){
+    floatMenu.style.display = 'none';
+    if(activeItemObj) {
+      activeItemObj.el.classList.remove('selected');
+      activeItemObj = null;
+    }
+  }
+
+  $('fmScale').addEventListener('input', e => {
+    if(!activeItemObj) return;
+    activeItemObj.scale = parseFloat(e.target.value);
+    updateTransform(activeItemObj);
+  });
+  $('fmRotate').addEventListener('input', e => {
+    if(!activeItemObj) return;
+    activeItemObj.rotate = parseFloat(e.target.value);
+    updateTransform(activeItemObj);
+  });
+  $('fmDelete').addEventListener('click', () => {
+    if(!activeItemObj) return;
+    activeItemObj.el.remove();
+    const idx = itemsData.indexOf(activeItemObj);
+    if(idx > -1) itemsData.splice(idx, 1);
+    closeMenu();
+  });
+  $('fmClose').addEventListener('click', closeMenu);
+
+  // Close menu if clicked on background
+  stage.addEventListener('pointerdown', e => {
+    if(e.target === stage) {
+      closeMenu();
+    }
+  });
+
+
+  let cachedImages = null;
   async function init(){
     const cfg = loadConfig();
     if(!cfg || !cfg.owner || !cfg.repo){
@@ -414,7 +500,7 @@
         showEmpty(cfg);
         return;
       }
-      $('statChip').textContent = `${cachedImages.length} OBJECTS`;
+      $('statChip').textContent = `${cachedImages.length} ITEMS`;
       placeCollage(cachedImages);
     } catch(e){
       console.error(e);
@@ -427,11 +513,11 @@
   function showEmpty(cfg){
     const m = $('centerMsg');
     m.innerHTML = `
-      <h2>아카이브가 비어 있습니다</h2>
-      <p><b>${cfg.owner}/${cfg.repo}</b>의 <code style="color:var(--violet);">${cfg.path || 'gallery'}/</code> 폴더에 아직 등록된 오브젝트가 없습니다.<br>스튜디오에서 그림을 그리고 등록하면 여기에 나타납니다.</p>
+      <h2>ARCHIVE IS EMPTY</h2>
+      <p>No objects found in <code style="color:var(--ink);">${cfg.path || 'gallery'}/</code> of <b>${cfg.owner}/${cfg.repo}</b>.</p>
       <div class="setup-btns" style="max-width:320px;">
-        <a class="btn-link" style="flex:1;text-align:center;" href="index.html">스튜디오로 이동</a>
-        <button class="btn" style="flex:1;" onclick="location.reload()">↻ 새로고침</button>
+        <a class="btn-link" style="flex:1;text-align:center;" href="index.html">GO TO STUDIO</a>
+        <button class="btn" style="flex:1;" onclick="location.reload()">↻ REFRESH</button>
       </div>
     `;
     m.style.display = 'flex';
@@ -440,12 +526,11 @@
   function showError(msg, cfg){
     const m = $('centerMsg');
     m.innerHTML = `
-      <h2 style="color:var(--coral);">불러오기 실패</h2>
+      <h2 style="color:var(--danger);">LOAD FAILED</h2>
       <p>${msg}</p>
-      <p style="color:var(--ink-faint);">저장소가 비공개인 경우 <b>스튜디오 페이지에서 GitHub 연결 설정</b>을 진행해 토큰을 저장해주세요.<br>공개 저장소라면 owner/repo 정보를 확인해주세요.</p>
       <div class="setup-btns" style="max-width:400px;">
-        <button class="btn" style="flex:1;" id="reconfigBtn">저장소 재설정</button>
-        <a class="btn-link" style="flex:1;text-align:center;" href="index.html">스튜디오로 이동</a>
+        <button class="btn" style="flex:1; background:var(--ink); color:#fff;" id="reconfigBtn">RECONFIGURE</button>
+        <a class="btn-link" style="flex:1;text-align:center;" href="index.html">GO TO STUDIO</a>
       </div>
     `;
     m.style.display = 'flex';
@@ -456,11 +541,8 @@
   }
 
   $('reshuffleBtn').addEventListener('click', ()=>{
-    if(cachedImages && cachedImages.length){
-      placeCollage(cachedImages);
-    } else {
-      init();
-    }
+    if(cachedImages && cachedImages.length) placeCollage(cachedImages);
+    else init();
   });
 
   $('setupSave').addEventListener('click', ()=>{
@@ -470,10 +552,7 @@
       path:   $('setupPath').value.trim() || 'gallery',
       branch: $('setupBranch').value.trim() || 'main'
     };
-    if(!cfg.owner || !cfg.repo){
-      alert('owner와 repo를 입력해주세요.');
-      return;
-    }
+    if(!cfg.owner || !cfg.repo){ alert('Owner and Repo required.'); return; }
     saveConfig(cfg);
     $('centerMsg').style.display = 'none';
     init();

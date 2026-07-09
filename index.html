@@ -1,389 +1,347 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NU-ABSTRACT — 오브젝트 기반 추상 구성 툴</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>NU-ABSTRACT STUDIO</title>
 <style>
-  :root{
-    /* 밝고 세련된 모던(Light) UI */
-    --bg:#f4f4f6;
-    --panel:#ffffff;
-    --panel-alt:#f8f9fa;
-    --border:#e5e5eb;
-    --border-soft:#f0f0f3;
-    --ink:#111111;
-    --ink-dim:#555555;
-    --ink-faint:#888888;
+  :root {
+    /* Apple/iOS Style Grayscale Theme */
+    --bg: #f5f5f7;
+    --panel: #ffffff;
+    --panel-alt: #f5f5f7;
+    --border: #d2d2d7;
+    --border-soft: #e5e5ea;
+    --ink: #1d1d1f;
+    --ink-dim: #86868b;
+    --ink-faint: #aeaeb2;
     
-    --lime:#b2e622;
-    --coral:#ff5555;
-    --violet:#8b5cf6;
-    --canvas-bg:#ffffff;
-    --canvas-grid:#eaeaeb;
+    --accent: #1d1d1f;
+    --accent-dim: #424245;
+    --danger: #ff3b30;
     
-    --mono:'IBM Plex Mono', monospace;
-    --display:'Space Grotesk', sans-serif;
-    --body:'IBM Plex Sans KR', sans-serif;
+    --canvas-bg: #ffffff;
+    --canvas-grid: #e5e5ea;
+    
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
-  *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:var(--body);}
-  ::selection{background:var(--lime);color:#111;}
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--ink-dim); color: #fff; }
 
-  .app{max-width:1500px;margin:0 auto;padding:28px 28px 60px;}
+  .app { max-width: 1500px; margin: 0 auto; padding: 28px 28px 60px; }
 
   /* ---------- topbar ---------- */
-  .topbar{
-    display:flex;align-items:flex-end;justify-content:space-between;
-    border-bottom:1px solid var(--border);padding-bottom:18px;margin-bottom:26px;
-    flex-wrap:wrap;gap:14px;
+  .topbar {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    border-bottom: 1px solid var(--border); padding-bottom: 18px; margin-bottom: 26px;
+    flex-wrap: wrap; gap: 14px;
   }
-  .brand{display:flex;align-items:center;gap:14px;}
-  .brand-mark{
-    width:40px;height:40px;border:1.5px solid var(--ink);border-radius:3px;
-    display:flex;align-items:center;justify-content:center;color:var(--ink);
-    font-family:var(--display);font-size:18px;flex-shrink:0;
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand h1 { font-weight: 700; font-size: 24px; letter-spacing: -0.5px; margin: 0; }
+  .brand p { font-family: var(--font-mono); font-size: 12px; color: var(--ink-dim); margin: 3px 0 0; }
+  
+  .stat-readout {
+    font-family: var(--font-mono); font-size: 12px; color: var(--ink-dim);
+    border: 1px solid var(--border); padding: 7px 12px; border-radius: 8px;
+    background: var(--panel); letter-spacing: 0.5px; white-space: nowrap;
   }
-  .brand h1{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:0.5px;margin:0;}
-  .brand p{font-family:var(--mono);font-size:12px;color:var(--ink-dim);margin:3px 0 0;}
-  .stat-readout{
-    font-family:var(--mono);font-size:12px;color:var(--ink-dim);
-    border:1px solid var(--border);padding:7px 12px;border-radius:3px;
-    background:var(--panel);
-    letter-spacing:0.5px;white-space:nowrap;
-  }
-  .stat-readout .dot{color:var(--violet);}
+  .stat-readout .dot { color: var(--accent); }
 
   /* ---------- layout ---------- */
-  .layout{display:grid;grid-template-columns: 1.25fr 1fr 1.05fr;gap:22px;align-items:start;}
-  @media (max-width:1240px){.layout{grid-template-columns:1fr;}}
+  .layout { display: grid; grid-template-columns: 1.25fr 1fr 1.05fr; gap: 22px; align-items: start; }
+  @media (max-width:1240px) { .layout { grid-template-columns: 1fr; } }
 
-  .panel{
-    background:var(--panel);border:1px solid var(--border);border-radius:6px;
-    padding:18px;display:flex;flex-direction:column;gap:14px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.02);
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 20px; display: flex; flex-direction: column; gap: 14px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.03);
   }
-  .panel-head{display:flex;align-items:center;gap:10px;}
-  .panel-index{
-    font-family:var(--mono);font-size:11px;color:#fff;background:var(--ink);
-    width:22px;height:22px;border-radius:3px;display:flex;align-items:center;justify-content:center;
-    flex-shrink:0;font-weight:500;
+  .panel-head { display: flex; align-items: center; gap: 10px; }
+  .panel-index {
+    font-family: var(--font-mono); font-size: 11px; color: #fff; background: var(--ink);
+    width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-weight: 600;
   }
-  .objects-panel .panel-index{background:var(--violet);}
-  .comp-panel .panel-index{background:var(--coral);}
-  .panel-head h2{font-family:var(--display);font-size:15px;font-weight:600;margin:0;letter-spacing:0.3px;}
-  .count-badge{
-    margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-dim);
-    border:1px solid var(--border);padding:2px 8px;border-radius:10px;
+  .panel-head h2 { font-size: 16px; font-weight: 600; margin: 0; letter-spacing: -0.2px; }
+  .count-badge {
+    margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim);
+    border: 1px solid var(--border); padding: 3px 10px; border-radius: 12px;
   }
 
   /* ---------- canvas frames & Trace Image ---------- */
-  .canvas-frame{
-    position:relative;width:100%;aspect-ratio:1/1;border:1px solid var(--border-soft);
-    border-radius:4px;overflow:hidden; background:var(--canvas-bg);
+  .canvas-frame {
+    position: relative; width: 100%; aspect-ratio: 1/1; border: 1px solid var(--border-soft);
+    border-radius: 8px; overflow: hidden; background: var(--canvas-bg);
   }
-  .paper-bg{
-    position:absolute;inset:0;background:var(--canvas-bg);
+  .paper-bg {
+    position: absolute; inset: 0; background: var(--canvas-bg);
     background-image:
       linear-gradient(var(--canvas-grid) 1px, transparent 1px),
       linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px);
-    background-size:30px 30px;
+    background-size: 30px 30px;
   }
   #traceImage {
-    position:absolute; inset:0; width:100%; height:100%; 
-    object-fit:contain; pointer-events:none; display:none; opacity:0.3;
+    position: absolute; inset: 0; width: 100%; height: 100%; 
+    object-fit: contain; pointer-events: none; display: none; opacity: 0.3;
   }
-  canvas{display:block;}
-  #drawCanvas{
-    position:absolute;inset:0;width:100%;height:100%;touch-action:none;
+  canvas { display: block; image-rendering: pixelated; }
+  #drawCanvas {
+    position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none;
   }
   
   #canvasCursor {
-    position:absolute;
-    border:1px solid #000;
-    box-shadow:0 0 0 1px rgba(255,255,255,0.8);
-    border-radius:50%;
-    pointer-events:none;
-    display:none;
-    transform:translate(-50%, -50%);
-    box-sizing:border-box;
-    z-index:10;
+    position: absolute; border: 1px solid #000; box-shadow: 0 0 0 1px rgba(255,255,255,0.8);
+    pointer-events: none; display: none; transform: translate(-50%, -50%);
+    box-sizing: border-box; z-index: 10;
   }
 
-  .comp-frame{background:#f8f9fa; position:relative; border-color:var(--border);}
-  #compCanvas{width:100%; height:100%; cursor:default;}
+  .comp-frame { background: #f5f5f7; position: relative; border-color: var(--border); }
+  #compCanvas { width: 100%; height: 100%; cursor: default; }
 
-  /* ---------- trace tools (New) ---------- */
+  /* ---------- trace tools ---------- */
   .trace-tools {
-    display:flex; gap:8px; align-items:center; background:var(--panel-alt);
-    padding:8px 12px; border-radius:4px; border:1px dashed var(--border);
+    display: flex; gap: 8px; align-items: center; background: var(--panel-alt);
+    padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border-soft);
   }
-  .trace-tools span { font-family:var(--mono); font-size:11px; color:var(--ink-dim); white-space:nowrap; }
+  .trace-tools span { font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); white-space: nowrap; }
 
   /* ---------- tool select ---------- */
-  .tool-select{display:flex;gap:6px;align-items:center;}
-  .tool-btn{
-    flex:1;padding:9px 4px;font-family:var(--mono);font-size:11px;
-    border:1px solid var(--border);background:var(--panel-alt);color:var(--ink-dim);
-    border-radius:4px;cursor:pointer;text-align:center;letter-spacing:0.2px;
-    transition: all 0.2s;
+  .tool-select { display: flex; gap: 6px; align-items: center; }
+  .tool-btn {
+    flex: 1; padding: 10px 4px; font-family: var(--font-mono); font-size: 11px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--ink-dim);
+    border-radius: 8px; cursor: pointer; text-align: center; font-weight: 500;
+    transition: all 0.15s;
   }
-  .tool-btn:hover{color:var(--ink); border-color:var(--ink-dim);}
-  .tool-btn.active{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:500;}
-  .tool-clear-btn{
-    background:var(--panel-alt);
-    color:var(--coral);
-    border:1px solid var(--border);
-    font-weight:600;
-  }
-  .tool-clear-btn:hover{
-    background:rgba(255,85,85,0.05);
-    border-color:var(--coral);
-  }
+  .tool-btn:hover { color: var(--ink); background: var(--panel-alt); }
+  .tool-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .tool-clear-btn { background: var(--panel); color: var(--danger); font-weight: 600; }
+  .tool-clear-btn:hover { background: rgba(255,59,48,0.05); border-color: var(--danger); }
 
   /* ---------- color targets ---------- */
-  .color-targets{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;}
-  .color-target{
-    display:flex;align-items:center;gap:7px;cursor:pointer;padding:6px 9px;
-    border:1px solid var(--border);border-radius:4px;background:var(--panel-alt);flex:1;min-width:120px;
+  .color-targets { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; }
+  .color-target {
+    display: flex; align-items: center; gap: 7px; cursor: pointer; padding: 8px 12px;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--panel); flex: 1; min-width: 120px;
+    transition: border-color 0.15s;
   }
-  .color-target.active{border-color:var(--violet);}
-  .color-target .swatch-preview{width:20px;height:20px;border-radius:3px;border:1px solid rgba(0,0,0,0.1);flex-shrink:0;}
-  .color-target span{font-family:var(--mono);font-size:11px;color:var(--ink-dim);}
-  .color-target.active span{color:var(--ink);}
+  .color-target.active { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+  .color-target .swatch-preview { width: 20px; height: 20px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0; }
+  .color-target span { font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); }
+  .color-target.active span { color: var(--ink); font-weight: 500; }
 
-  .brush-preview-wrap{display:flex;align-items:center;gap:10px;flex-shrink:0;}
-  .brush-preview{
-    width:38px;height:38px;border:1px solid var(--border);border-radius:4px;
-    background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  .brush-preview-wrap { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .brush-preview {
+    width: 40px; height: 40px; border: 1px solid var(--border); border-radius: 8px;
+    background: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
-  #brushPreviewDot{border-radius:50%;background:#111;}
+  #brushPreviewDot { background: #111; }
 
   /* ---------- 12 primary colors palette ---------- */
-  .palette-wrap{display:flex;flex-direction:column;gap:6px;}
-  .palette-label{font-family:var(--mono);font-size:10.5px;color:var(--ink-dim);display:flex;justify-content:space-between;gap:8px;}
-  .palette-grid{
-    width:100%;
-    display:grid;grid-template-columns:repeat(12,1fr);gap:4px;
-    background:var(--panel-alt);padding:6px;border-radius:4px;border:1px solid var(--border);
+  .palette-wrap { display: flex; flex-direction: column; gap: 8px; }
+  .palette-label { font-family: var(--font-mono); font-size: 10px; color: var(--ink-dim); display: flex; justify-content: space-between; gap: 8px; text-transform: uppercase; }
+  .palette-grid {
+    width: 100%; display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px;
+    background: var(--panel-alt); padding: 8px; border-radius: 10px; border: 1px solid var(--border);
   }
-  .palette-cell{
-    aspect-ratio:1/1;border-radius:3px;cursor:pointer;
-    border:1px solid rgba(0,0,0,0.1);position:relative;
+  .palette-cell {
+    aspect-ratio: 1/1; border-radius: 4px; cursor: pointer;
+    border: 1px solid rgba(0,0,0,0.1); position: relative; transition: transform 0.1s;
   }
-  .palette-cell:hover{outline:1.5px solid var(--ink);outline-offset:1px;z-index:2;}
-  .palette-cell.selected{outline:1.5px solid var(--violet);outline-offset:1px;z-index:2;}
-  .palette-custom{
-    display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--ink-dim);
-  }
-  .palette-custom input[type=color]{
-    width:30px;height:24px;border:1px solid var(--border);border-radius:3px;background:none;padding:0;cursor:pointer;
-  }
+  .palette-cell:hover { transform: scale(1.1); z-index: 2; }
+  .palette-cell.selected { outline: 2px solid var(--ink); outline-offset: 1px; z-index: 2; }
+  .palette-custom { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); }
+  .palette-custom input[type=color] { width: 32px; height: 24px; border: 1px solid var(--border); border-radius: 4px; background: none; padding: 0; cursor: pointer; }
 
-  .range-row{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--ink-dim);flex:1;min-width:120px;}
-  input[type=range]{flex:1;accent-color:var(--ink);}
-  .val{min-width:40px;text-align:right;color:var(--ink);}
+  .range-row { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); flex: 1; min-width: 120px; }
+  input[type=range] { flex: 1; accent-color: var(--ink); }
+  .val { min-width: 40px; text-align: right; color: var(--ink); font-weight: 500; }
 
-  .btn{
-    font-family:var(--mono);font-size:12px;padding:9px 14px;border-radius:4px;border:1px solid var(--border);
-    background:var(--panel-alt);color:var(--ink);cursor:pointer;letter-spacing:0.3px;
-    transition:background 0.15s, border-color 0.15s, transform 0.1s, color 0.15s;
+  /* Standard Apple Style Buttons */
+  .btn {
+    font-family: var(--font-mono); font-size: 12px; padding: 10px 16px; border-radius: 8px; border: none;
+    background: var(--border-soft); color: var(--ink); cursor: pointer; letter-spacing: 0.3px; font-weight: 500;
+    transition: background 0.15s, transform 0.1s, color 0.15s;
   }
-  .btn:hover{border-color:var(--ink); background:var(--ink); color:#fff;}
-  .btn:active{transform:scale(0.98);}
-  .btn-accent{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:500;}
-  .btn-accent:hover{background:#333;border-color:#333;}
-  .btn-violet{background:var(--violet);color:#fff;border-color:var(--violet);font-weight:500;}
-  .btn-coral{background:transparent;color:var(--coral);border-color:var(--coral);}
-  .btn-coral:hover{background:rgba(255,85,85,0.05); color:var(--coral);}
-  .btn-ghost{background:transparent;}
-  .btn-ghost:hover{background:var(--panel-alt); border-color:var(--border); color:var(--ink);}
-  .btn-full{width:100%;}
-  .btn-sm{padding:5px 9px;font-size:11px;}
+  .btn:hover { background: var(--border); }
+  .btn:active { transform: scale(0.98); }
+  .btn-accent { background: var(--accent); color: #fff; }
+  .btn-accent:hover { background: var(--accent-dim); }
+  .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  .btn-danger:hover { background: rgba(255,59,48,0.05); }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); }
+  .btn-ghost:hover { background: var(--panel-alt); color: var(--ink); }
+  .btn-full { width: 100%; padding: 12px 16px; font-size: 13px; }
+  .btn-sm { padding: 6px 12px; font-size: 11px; }
 
-  .checkbox-row{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--ink-dim);}
-  .checkbox-row input{accent-color:var(--ink);}
-  .hint-note{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);line-height:1.5;}
+  .checkbox-row { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); }
+  .checkbox-row input { accent-color: var(--ink); width: 14px; height: 14px; }
+  .hint-note { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-faint); line-height: 1.5; }
 
   /* ---------- editors ---------- */
-  .stroke-editor, .comp-item-editor{
-    border-top:1px solid var(--violet);padding-top:14px;display:flex;flex-direction:column;gap:10px;
-    background:rgba(139,92,246,0.03);border-radius:4px;padding:12px;border:1px solid var(--violet);
+  .stroke-editor, .comp-item-editor {
+    border-top: 1px solid var(--ink); padding-top: 14px; display: flex; flex-direction: column; gap: 10px;
+    background: var(--panel-alt); border-radius: 8px; padding: 14px; border: 1px solid var(--border);
   }
-  .comp-item-editor{
-    border-color:var(--coral);
-    background:rgba(255,85,85,0.03);
-  }
-  .stroke-editor h3{font-family:var(--display);font-size:13px;font-weight:600;margin:0;color:var(--violet);}
-  .comp-item-editor h3{font-family:var(--display);font-size:13px;font-weight:600;margin:0;color:var(--coral);}
-  .stroke-editor .btn-row, .comp-item-editor .btn-row{display:flex;gap:8px;}
-  .stroke-editor .btn-row .btn, .comp-item-editor .btn-row .btn{flex:1;}
+  .stroke-editor h3, .comp-item-editor h3 { font-size: 13px; font-weight: 600; margin: 0; color: var(--ink); }
+  .stroke-editor .btn-row, .comp-item-editor .btn-row { display: flex; gap: 8px; }
+  .stroke-editor .btn-row .btn, .comp-item-editor .btn-row .btn { flex: 1; }
 
   /* ---------- object gallery ---------- */
-  .objects-grid{
-    display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-height:340px;overflow-y:auto;padding-right:2px;
+  .objects-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-height: 340px; overflow-y: auto; padding-right: 4px;
   }
-  .objects-grid::-webkit-scrollbar{width:6px;}
-  .objects-grid::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
-  .empty-hint{
-    grid-column:1/-1;font-family:var(--mono);font-size:12px;color:var(--ink-faint);
-    text-align:center;padding:30px 10px;border:1px dashed var(--border);border-radius:4px;
+  .objects-grid::-webkit-scrollbar { width: 6px; }
+  .objects-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .empty-hint {
+    grid-column: 1/-1; font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint);
+    text-align: center; padding: 40px 10px; border: 1px dashed var(--border); border-radius: 8px;
   }
-  .obj-card{
-    border:1px dashed var(--border);border-radius:4px;padding:6px;background:var(--panel-alt);
-    display:flex;flex-direction:column;gap:5px;
+  .obj-card {
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: var(--panel);
+    display: flex; flex-direction: column; gap: 6px; transition: border-color 0.2s;
   }
-  .obj-card.selected{border-color:var(--violet);border-style:solid; background:rgba(139,92,246,0.03);}
-  .obj-thumb{
-    position:relative;width:100%;aspect-ratio:1/1;border-radius:3px;overflow:hidden;
-    background:#fff;
-    background-image:linear-gradient(var(--canvas-grid) 1px, transparent 1px),linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px);
-    background-size:10px 10px; border:1px solid var(--border-soft);
+  .obj-card.selected { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+  .obj-thumb {
+    position: relative; width: 100%; aspect-ratio: 1/1; border-radius: 4px; overflow: hidden;
+    background: #fff; background-image: linear-gradient(var(--canvas-grid) 1px, transparent 1px), linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px);
+    background-size: 10px 10px; border: 1px solid var(--border-soft);
   }
-  .obj-thumb canvas{width:100%;height:100%;object-fit:contain;}
-  .obj-meta{font-family:var(--mono);font-size:9.5px;color:var(--ink-dim);display:flex;justify-content:space-between;}
-  .obj-actions{display:flex;gap:4px;}
-  .obj-actions .btn{flex:1;padding:5px 4px;font-size:10px;text-align:center;}
+  .obj-thumb canvas { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+  .obj-meta { font-family: var(--font-mono); font-size: 10px; color: var(--ink-dim); display: flex; justify-content: space-between; }
+  .obj-actions { display: flex; gap: 4px; }
+  .obj-actions .btn { flex: 1; padding: 6px 4px; font-size: 10px; text-align: center; }
 
   /* ---------- variation block ---------- */
-  .variation-block{
-    border-top:1px solid var(--border);padding-top:14px;display:flex;flex-direction:column;gap:10px;
+  .variation-block { border-top: 1px solid var(--border); padding-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .panel-head-sub h3 { font-size: 13px; font-weight: 600; margin: 0; color: var(--ink); }
+  .variations-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .var-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 6px;
+    display: flex; flex-direction: column; gap: 6px;
   }
-  .panel-head-sub h3{font-family:var(--display);font-size:13px;font-weight:600;margin:0;color:var(--violet);}
-  .variations-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
-  .var-card{
-    background:var(--panel-alt);border:1px solid var(--border);border-radius:4px;padding:5px;
-    display:flex;flex-direction:column;gap:5px;
+  .var-thumb {
+    width: 100%; aspect-ratio: 1/1; border-radius: 4px; background: #fff; overflow: hidden;
+    background-image: linear-gradient(var(--canvas-grid) 1px, transparent 1px), linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px);
+    background-size: 10px 10px; border: 1px solid var(--border-soft);
   }
-  .var-thumb{
-    width:100%;aspect-ratio:1/1;border-radius:3px;background:#fff;overflow:hidden;
-    background-image:linear-gradient(var(--canvas-grid) 1px, transparent 1px),linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px);
-    background-size:10px 10px; border:1px solid var(--border-soft);
-  }
-  .var-thumb canvas{width:100%;height:100%;object-fit:contain;}
-  .variation-actions{display:flex;gap:8px;}
-  .variation-actions .btn{flex:1;}
+  .var-thumb canvas { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+  .variation-actions { display: flex; gap: 8px; }
+  .variation-actions .btn { flex: 1; }
 
   /* ---------- composition controls ---------- */
-  .comp-controls{display:flex;flex-direction:column;gap:12px;}
-  .comp-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-  .comp-btns{display:flex;gap:8px;}
-  .comp-btns .btn{flex:1;}
-  .bg-swatches{display:flex;gap:6px;align-items:center;}
-  .swatch{
-    width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;
-    box-shadow:0 0 0 1px var(--border);
+  .comp-controls { display: flex; flex-direction: column; gap: 12px; }
+  .comp-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .comp-btns { display: flex; gap: 8px; }
+  .comp-btns .btn { flex: 1; }
+  .bg-swatches { display: flex; gap: 6px; align-items: center; }
+  .swatch {
+    width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; cursor: pointer;
+    box-shadow: 0 0 0 1px var(--border);
   }
-  .swatch.active{border-color:var(--ink); box-shadow:0 0 0 2px var(--ink);}
-  .swatch-custom{position:relative;overflow:hidden;}
-  .swatch-custom input[type=color]{
-    position:absolute;top:-4px;left:-4px;width:36px;height:36px;border:none;padding:0;cursor:pointer;
-  }
-  .label-mono{font-family:var(--mono);font-size:11px;color:var(--ink-dim);min-width:74px;}
+  .swatch.active { border-color: #fff; box-shadow: 0 0 0 2px var(--ink); }
+  .swatch-custom { position: relative; overflow: hidden; }
+  .swatch-custom input[type=color] { position: absolute; top: -4px; left: -4px; width: 36px; height: 36px; border: none; padding: 0; cursor: pointer; }
+  .label-mono { font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); min-width: 74px; }
 
-  footer{
-    margin-top:30px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--ink-faint);
-  }
+  footer { margin-top: 30px; text-align: center; font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); }
 
-  .toast{
-    position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);
-    background:var(--ink);border:1px solid var(--ink);color:#fff;
-    font-family:var(--mono);font-size:12px;padding:10px 16px;border-radius:5px;
-    opacity:0;transition:opacity 0.25s, transform 0.25s;pointer-events:none;z-index:50;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  .toast {
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: rgba(29,29,31,0.9); border: none; color: #fff; backdrop-filter: blur(8px);
+    font-family: var(--font-mono); font-size: 12px; padding: 12px 20px; border-radius: 12px;
+    opacity: 0; transition: opacity 0.3s, transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); pointer-events: none; z-index: 50;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
   }
-  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   /* ---------- folder / IO chip ---------- */
-  .folder-chip{
-    display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;
-    color:var(--ink-dim);border:1px solid var(--border);padding:6px 10px;border-radius:4px;
-    background:var(--panel);flex-wrap:wrap;
+  .folder-chip {
+    display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px;
+    color: var(--ink-dim); border: 1px solid var(--border); padding: 8px 12px; border-radius: 8px;
+    background: var(--panel); flex-wrap: wrap;
   }
-  .folder-chip .folder-status{color:var(--ink);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .folder-chip.connected{border-color:var(--ink);}
-  .folder-chip .link-btn{
-    background:transparent;border:1px solid var(--border);color:var(--ink);
-    font-family:var(--mono);font-size:10.5px;padding:4px 8px;border-radius:3px;cursor:pointer;
-    transition: all 0.2s;
+  .folder-chip .folder-status { color: var(--ink); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+  .folder-chip.connected { border-color: var(--ink); }
+  .folder-chip .link-btn {
+    background: var(--border-soft); border: none; color: var(--ink);
+    font-family: var(--font-mono); font-size: 10px; padding: 4px 8px; border-radius: 4px; cursor: pointer;
+    font-weight: 500; transition: all 0.15s;
   }
-  .folder-chip .link-btn:hover{border-color:var(--ink);background:var(--ink);color:#fff;}
-  .folder-chip .link-btn.violet:hover{border-color:var(--violet);background:var(--violet);color:#fff;}
+  .folder-chip .link-btn:hover { background: var(--border); }
+  .folder-chip .link-btn.accent { background: var(--ink); color: #fff; }
+  .folder-chip .link-btn.accent:hover { background: var(--accent-dim); }
 
   /* ---------- IO controls in samples panel ---------- */
-  .io-controls{
-    display:flex;flex-direction:column;gap:8px;
-    background:var(--panel-alt);border:1px dashed var(--border);
-    border-radius:4px;padding:10px;
+  .io-controls {
+    display: flex; flex-direction: column; gap: 10px;
+    background: var(--panel-alt); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px;
   }
-  .io-controls-row{display:flex;gap:6px;flex-wrap:wrap;}
-  .io-controls-row .btn{flex:1;min-width:100px;}
-  .io-hint{font-family:var(--mono);font-size:10px;color:var(--ink-faint);line-height:1.5;margin:0;}
-  .io-hint code{color:var(--violet);background:rgba(139,92,246,0.08);padding:1px 4px;border-radius:2px;}
+  .io-controls-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .io-controls-row .btn { flex: 1; min-width: 100px; }
+  .io-hint { font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint); line-height: 1.5; margin: 0; }
+  .io-hint code { color: var(--ink); background: rgba(0,0,0,0.05); padding: 2px 4px; border-radius: 4px; font-weight: 500; }
 
-  /* ---------- GitHub List Modal (New) ---------- */
-  .modal-backdrop{
-    position:fixed;inset:0;background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);
-    display:none;align-items:center;justify-content:center;z-index:100;padding:20px;
+  /* ---------- GitHub List Modal ---------- */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(5px);
+    display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px;
   }
-  .modal-backdrop.show{display:flex;}
-  .modal{
-    background:var(--panel);border:1px solid var(--border);border-radius:8px;
-    padding:24px;max-width:520px;width:100%;max-height:85vh;overflow-y:auto;
-    display:flex;flex-direction:column;gap:14px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+  .modal-backdrop.show { display: flex; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 24px; max-width: 480px; width: 100%; max-height: 85vh; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 50px rgba(0,0,0,0.1);
   }
-  .modal.wide { max-width: 680px; }
-  .modal h2{font-family:var(--display);font-size:18px;font-weight:600;margin:0;letter-spacing:0.3px;}
-  .modal p.hint{font-family:var(--mono);font-size:11px;color:var(--ink-dim);line-height:1.6;margin:0;}
+  .modal.wide { max-width: 800px; }
+  .modal h2 { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: -0.3px; }
+  .modal p.hint { font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); line-height: 1.6; margin: 0; }
   
   .gh-load-grid {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
-    max-height: 400px; overflow-y: auto; padding: 4px; background:var(--panel-alt);
-    border: 1px solid var(--border); border-radius:4px;
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; /* 6개씩 작게 */
+    max-height: 450px; overflow-y: auto; padding: 8px; background: var(--panel-alt);
+    border: 1px solid var(--border); border-radius: 8px;
   }
   .gh-item {
-    border: 1px solid var(--border); border-radius: 4px; padding: 4px;
-    cursor: pointer; position: relative; transition: border-color 0.2s; background:#fff;
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px;
+    cursor: pointer; position: relative; transition: border-color 0.15s; background: #fff;
   }
-  .gh-item.selected { border-color: var(--violet); background: rgba(139,92,246,0.05); }
-  .gh-item img { width: 100%; aspect-ratio: 1/1; object-fit: contain; }
-  .gh-item-name { font-size: 9px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4px; color:var(--ink-dim); }
+  .gh-item.selected { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+  .gh-item img { width: 100%; aspect-ratio: 1/1; object-fit: contain; image-rendering: pixelated; }
+  .gh-item-name { font-family: var(--font-mono); font-size: 8.5px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 6px; color: var(--ink-dim); }
   .gh-item .check {
-    position: absolute; top: 4px; left: 4px; width: 16px; height: 16px; 
-    border: 1px solid var(--border); border-radius: 2px; background: #fff;
+    position: absolute; top: 6px; left: 6px; width: 14px; height: 14px; 
+    border: 1px solid var(--border); border-radius: 3px; background: #fff; transition: background 0.15s;
   }
-  .gh-item.selected .check { background: var(--violet); border-color: var(--violet); }
+  .gh-item.selected .check { background: var(--ink); border-color: var(--ink); }
 
-  .modal .field{display:flex;flex-direction:column;gap:5px;}
-  .modal .field label{font-family:var(--mono);font-size:11px;color:var(--ink-dim);letter-spacing:0.3px;}
-  .modal .field input{
-    background:var(--panel-alt);border:1px solid var(--border);color:var(--ink);
-    font-family:var(--mono);font-size:12px;padding:9px 11px;border-radius:4px;outline:none;
+  .modal .field { display: flex; flex-direction: column; gap: 6px; }
+  .modal .field label { font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); }
+  .modal .field input {
+    background: var(--panel-alt); border: 1px solid var(--border); color: var(--ink);
+    font-family: var(--font-mono); font-size: 12px; padding: 10px 12px; border-radius: 6px; outline: none;
   }
-  .modal .field input:focus{border-color:var(--violet);}
-  .modal .field .sub{font-family:var(--mono);font-size:10px;color:var(--ink-faint);line-height:1.5;}
-  .modal .modal-btns{display:flex;gap:8px;margin-top:6px;}
-  .modal .modal-btns .btn{flex:1;}
-  .modal a{color:var(--violet);text-decoration:none;}
-  .modal a:hover{text-decoration:underline;}
-  .modal .warn-box{
-    border:1px solid var(--coral);background:rgba(255,85,85,0.05);
-    padding:10px 12px;border-radius:4px;font-family:var(--mono);font-size:10.5px;
-    color:var(--coral);line-height:1.55;
+  .modal .field input:focus { border-color: var(--ink); }
+  .modal .field .sub { font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint); line-height: 1.5; }
+  .modal .modal-btns { display: flex; gap: 8px; margin-top: 10px; }
+  .modal .modal-btns .btn { flex: 1; }
+  .modal a { color: var(--ink); text-decoration: underline; }
+  
+  .warn-box {
+    border: 1px solid var(--danger); background: rgba(255,59,48,0.05);
+    padding: 12px; border-radius: 8px; font-family: var(--font-mono); font-size: 10.5px;
+    color: var(--danger); line-height: 1.55;
   }
 
-  .folder-chip.gh-connected{border-color:var(--violet);}
-  .folder-chip .gh-status{color:var(--violet);}
-  .archive-link{
-    font-family:var(--mono);font-size:11px;color:var(--ink-dim);
-    border:1px solid var(--border);padding:7px 12px;border-radius:3px;
-    text-decoration:none;letter-spacing:0.3px; background:var(--panel);
-    transition: all 0.2s;
+  .archive-link {
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink); font-weight: 500;
+    border: 1px solid var(--border); padding: 8px 14px; border-radius: 8px;
+    text-decoration: none; background: var(--panel); transition: all 0.15s;
   }
-  .archive-link:hover{border-color:var(--ink); background:var(--ink); color:#fff;}
+  .archive-link:hover { border-color: var(--ink); background: var(--ink); color: #fff; }
 </style>
 </head>
 <body>
@@ -391,89 +349,87 @@
 
   <div class="topbar">
     <div class="brand">
-      <div class="brand-mark">◇</div>
       <div>
         <h1>NU-ABSTRACT</h1>
-        <p>그리면 표본이 되고, 표본은 자유로운 다층 구성이 됩니다 — 1080 × 1080</p>
+        <p>Drawing becomes specimen, specimens compose multiple layers — 1080 × 1080</p>
       </div>
     </div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <div class="folder-chip" id="folderChip">
-        <span>로컬 폴더:</span>
-        <span class="folder-status" id="folderStatus">미연결 (다운로드로 저장)</span>
-        <button class="link-btn" id="connectFolderBtn">연결</button>
+        <span>LOCAL:</span>
+        <span class="folder-status" id="folderStatus">Unlinked (Saves to Download)</span>
+        <button class="link-btn" id="connectFolderBtn">LINK</button>
       </div>
       <div class="folder-chip" id="ghChip">
-        <span>GitHub:</span>
-        <span class="folder-status gh-status" id="ghStatus">미연결</span>
-        <button class="link-btn violet" id="connectGhBtn">설정</button>
+        <span>GITHUB:</span>
+        <span class="folder-status gh-status" id="ghStatus">Unlinked</span>
+        <button class="link-btn accent" id="connectGhBtn">CONFIG</button>
       </div>
-      <a class="archive-link" href="archive.html" target="_blank">아카이브 →</a>
+      <a class="archive-link" href="archive.html" target="_blank">ARCHIVE →</a>
       <div class="stat-readout"><span class="dot">●</span> <span id="statReadout">OBJ 0000 · READY</span></div>
     </div>
   </div>
 
   <div class="layout">
 
+    <!-- 01 DRAWING -->
     <section class="panel draw-panel">
-      <div class="panel-head"><span class="panel-index">01</span><h2>드로잉</h2></div>
+      <div class="panel-head"><span class="panel-index">01</span><h2>DRAWING</h2></div>
 
-      <!-- 트레이스 이미지 도구 추가 -->
       <div class="trace-tools">
-        <span>투명 참고자료:</span>
-        <button class="btn btn-sm" id="btnLoadTrace">불러오기</button>
+        <span>TRACE LAYER:</span>
+        <button class="btn btn-sm" id="btnLoadTrace">LOAD</button>
         <input type="file" id="inputTrace" accept="image/*" hidden>
-        <input type="range" id="traceOpacity" min="0" max="100" value="30" title="투명도 조절" style="width:70px">
-        <button class="btn btn-sm btn-ghost" id="btnClearTrace">제거</button>
+        <input type="range" id="traceOpacity" min="0" max="100" value="30" title="Opacity" style="width:70px">
+        <button class="btn btn-sm btn-ghost" id="btnClearTrace">CLEAR</button>
       </div>
 
       <div class="canvas-frame">
         <div class="paper-bg"></div>
-        <!-- 밑그림(트레이스) 레이어 -->
         <img id="traceImage" alt="trace layer">
         <canvas id="drawCanvas" width="1080" height="1080"></canvas>
         <div id="canvasCursor"></div>
       </div>
 
       <div class="tool-select">
-        <button class="tool-btn active" data-tool="brush">✎ 브러시</button>
-        <button class="tool-btn" data-tool="fill">▨ 채우기</button>
-        <button class="tool-btn" data-tool="eraser">▢ 지우개</button>
-        <button class="tool-btn" data-tool="select">◈ 편집</button>
-        <button class="tool-btn tool-clear-btn" id="clearDrawBtn">초기화</button>
+        <button class="tool-btn active" data-tool="brush" title="Hotkey: B">✎ BRUSH</button>
+        <button class="tool-btn" data-tool="fill" title="Hotkey: P">▨ FILL</button>
+        <button class="tool-btn" data-tool="eraser" title="Hotkey: E">▢ ERASER</button>
+        <button class="tool-btn" data-tool="select">◈ SELECT</button>
+        <button class="tool-btn tool-clear-btn" id="clearDrawBtn">RESET</button>
       </div>
 
       <div class="history-select" style="display:flex; gap:6px; margin-top:-4px;">
-        <button class="tool-btn" id="undoBtn">↶ 되돌리기</button>
-        <button class="tool-btn" id="redoBtn">↷ 앞으로 돌리기</button>
+        <button class="tool-btn" id="undoBtn" title="Ctrl+Z">↶ UNDO</button>
+        <button class="tool-btn" id="redoBtn" title="Ctrl+Shift+Z">↷ REDO</button>
       </div>
 
       <div class="color-targets">
         <div class="color-target active" id="strokeTarget">
           <div class="swatch-preview" id="strokeSwatchPreview" style="background:#111111"></div>
-          <span>선 색상</span>
+          <span>STROKE</span>
         </div>
         <div class="color-target" id="fillTarget">
-          <div class="swatch-preview" id="fillSwatchPreview" style="background:#ff5555"></div>
-          <span>채우기 색상</span>
+          <div class="swatch-preview" id="fillSwatchPreview" style="background:#ff3b30"></div>
+          <span>FILL</span>
         </div>
         <div class="brush-preview-wrap">
-          <div class="brush-preview"><div id="brushPreviewDot" style="width:8px;height:8px;"></div></div>
+          <div class="brush-preview"><div id="brushPreviewDot" style="width:8px;height:8px;border-radius:0;"></div></div>
         </div>
       </div>
 
       <div class="palette-wrap">
-        <div class="palette-label"><span>주요 12색 고채도 팔레트</span><span id="paletteTargetLabel">선 색상 편집 중</span></div>
+        <div class="palette-label"><span>PRIMARY PALETTE</span><span id="paletteTargetLabel">EDITING STROKE</span></div>
         <div class="palette-grid" id="paletteGrid"></div>
         <div class="palette-custom">
-          <span>커스텀 컬러</span>
+          <span>CUSTOM</span>
           <input type="color" id="customColorPicker" value="#111111">
         </div>
       </div>
 
       <div class="tool-row" style="display:flex;gap:10px;flex-wrap:wrap;">
         <div class="range-row">
-          <span>굵기</span>
+          <span>SIZE</span>
           <input type="range" id="brushSize" min="1" max="60" value="8">
           <span class="val" id="brushSizeVal">8</span>
         </div>
@@ -481,182 +437,179 @@
 
       <div class="tool-row" id="toleranceRow" style="display:flex;gap:10px;flex-wrap:wrap;">
         <div class="range-row">
-          <span>허용오차</span>
-          <input type="range" id="tolerance" min="0" max="120" value="32">
-          <span class="val" id="toleranceVal">32</span>
+          <span>TOLERANCE</span>
+          <input type="range" id="tolerance" min="0" max="120" value="0">
+          <span class="val" id="toleranceVal">0</span>
         </div>
       </div>
 
       <div class="stroke-editor" id="strokeEditor" hidden>
-        <h3>선택된 선 편집</h3>
+        <h3>EDIT SELECTED STROKE</h3>
         <div class="color-target active" id="selStrokeColorRow" style="cursor:default;">
           <div class="swatch-preview" id="selStrokeColorPreview" style="background:#111111"></div>
-          <span>이 선의 색상 — 위 팔레트에서 클릭해 변경</span>
+          <span>Select color from palette above</span>
         </div>
         <div class="range-row">
-          <span>이 선의 굵기</span>
+          <span>SIZE</span>
           <input type="range" id="selStrokeWidth" min="1" max="60" value="8">
           <span class="val" id="selStrokeWidthVal">8</span>
         </div>
         <div class="btn-row">
-          <button class="btn btn-ghost" id="deselectStrokeBtn">선택 해제</button>
-          <button class="btn btn-coral" id="deleteStrokeBtn">이 선 삭제</button>
+          <button class="btn btn-ghost" id="deselectStrokeBtn">DESELECT</button>
+          <button class="btn btn-danger" id="deleteStrokeBtn">DELETE STROKE</button>
         </div>
       </div>
 
       <label class="checkbox-row">
         <input type="checkbox" id="keepAfterRegister">
-        등록 후에도 드로잉 유지하기 (이어서 그리기)
+        Keep drawing after registering
       </label>
 
-      <button class="btn btn-accent btn-full" id="registerBtn">오브젝트로 등록 →</button>
+      <button class="btn btn-accent btn-full" id="registerBtn">REGISTER OBJECT →</button>
     </section>
 
+    <!-- 02 SAMPLES -->
     <section class="panel objects-panel drop-target" id="samplesPanel">
-      <div class="panel-head"><span class="panel-index">02</span><h2>표본 보관함</h2><span class="count-badge" id="objCount">0개</span></div>
+      <div class="panel-head"><span class="panel-index" style="background:var(--ink);">02</span><h2>SAMPLES</h2><span class="count-badge" id="objCount">0</span></div>
 
       <div class="io-controls">
         <div class="io-controls-row">
-          <button class="btn btn-sm" id="openFilesBtn">💾 오프라인 불러오기</button>
-          <button class="btn btn-sm" id="loadFolderBtn">🌐 온라인 불러오기</button>
+          <button class="btn btn-sm" id="openFilesBtn">💾 OFFLINE LOAD</button>
+          <button class="btn btn-sm btn-accent" id="loadFolderBtn">🌐 ONLINE LOAD</button>
         </div>
-        <p class="io-hint">오프라인: 내 컴퓨터의 PNG 선택 · 온라인: 연결된 GitHub 목록 선택 불러오기.<br>등록된 오브젝트는 <code>gallery/YYYY-MM-DD/</code> 에 자동 저장됩니다.</p>
+        <p class="io-hint">Offline: Select local PNGs · Online: Load from connected GitHub repo.<br>Auto-saves to <code>gallery/YYYY-MM-DD/</code>.</p>
         <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" multiple hidden>
       </div>
 
       <div class="objects-grid" id="objectsGrid">
-        <p class="empty-hint">아직 등록된 오브젝트가 없습니다.<br>왼쪽에서 그림을 그리고 등록해보세요.</p>
+        <p class="empty-hint">No objects registered yet.<br>Draw and register from the left panel.</p>
       </div>
 
       <div class="variation-block" id="variationBlock" hidden>
-        <div class="panel-head-sub"><h3>선형 추적 베리에이션 — <span id="varTargetLabel"></span></h3></div>
-        <p class="hint-note">원본의 의도를 해치지 않고, <b>선과 색상의 중복 없이</b> 형태와 색상만 자연스럽게 변주합니다.</p>
+        <div class="panel-head-sub"><h3>VARIATION — <span id="varTargetLabel"></span></h3></div>
+        <p class="hint-note">Applies structural warp and color shifts without layer duplication or anti-aliasing fuzziness.</p>
         <div class="variations-grid" id="variationsGrid"></div>
         <div class="variation-actions">
-          <button class="btn btn-ghost" id="regenVarBtn">다시 생성</button>
-          <button class="btn btn-violet" id="addAllVarBtn">전체를 표본으로 추가</button>
+          <button class="btn btn-ghost" id="regenVarBtn">REGENERATE</button>
+          <button class="btn btn-accent" id="addAllVarBtn">ADD ALL TO SAMPLES</button>
         </div>
       </div>
     </section>
 
+    <!-- 03 COMPOSITION -->
     <section class="panel comp-panel">
-      <div class="panel-head"><span class="panel-index">03</span><h2>구성</h2></div>
+      <div class="panel-head"><span class="panel-index" style="background:var(--ink);">03</span><h2>COMPOSITION</h2></div>
 
       <div class="canvas-frame comp-frame">
         <canvas id="compCanvas" width="1080" height="1080"></canvas>
       </div>
 
       <div class="comp-item-editor" id="compItemEditor" hidden>
-        <h3>선택된 배치 요소 조절</h3>
-        <p class="hint-note" style="color:var(--coral); margin-top:0;">* 이미지 본체를 마우스로 드래그하면 원하는 위치로 자유롭게 이동시킬 수 있습니다.</p>
+        <h3>ADJUST ELEMENT</h3>
+        <p class="hint-note" style="color:var(--ink-dim); margin-top:0;">* Drag the element in the canvas to move it.</p>
         <div class="range-row">
-          <span>개별 크기</span>
+          <span>SCALE</span>
           <input type="range" id="itemScale" min="10" max="400" value="100">
           <span class="val" id="itemScaleVal">1.0x</span>
         </div>
         <div class="range-row">
-          <span>개별 회전</span>
+          <span>ROTATE</span>
           <input type="range" id="itemAngle" min="0" max="360" value="0">
           <span class="val" id="itemAngleVal">0°</span>
         </div>
         <div class="btn-row">
-          <button class="btn btn-ghost" id="sendForwardBtn">맨 앞으로</button>
-          <button class="btn btn-ghost" id="sendBackwardBtn">맨 뒤로</button>
-          <button class="btn btn-coral" id="deleteItemBtn">이 요소 삭제</button>
+          <button class="btn btn-ghost" id="sendForwardBtn">FORWARD</button>
+          <button class="btn btn-ghost" id="sendBackwardBtn">BACKWARD</button>
+          <button class="btn btn-danger" id="deleteItemBtn">DELETE</button>
         </div>
       </div>
 
       <div class="comp-controls">
         <div class="comp-row">
-          <span class="label-mono">배치 개수</span>
-          <input type="range" id="compCount" min="1" max="60" value="14" style="flex:1;accent-color:var(--coral);">
+          <span class="label-mono">COUNT</span>
+          <input type="range" id="compCount" min="1" max="60" value="14" style="flex:1;">
           <span class="val" id="compCountVal">14</span>
         </div>
         <div class="comp-row">
-          <span class="label-mono">기본 크기범위</span>
-          <input type="range" id="scaleMin" min="10" max="300" value="40" style="flex:1;accent-color:var(--coral);">
-          <input type="range" id="scaleMax" min="10" max="300" value="160" style="flex:1;accent-color:var(--coral);">
+          <span class="label-mono">SCALE RANGE</span>
+          <input type="range" id="scaleMin" min="10" max="300" value="40" style="flex:1;">
+          <input type="range" id="scaleMax" min="10" max="300" value="160" style="flex:1;">
           <span class="val" id="scaleRangeVal" style="width:70px;">0.4–1.6x</span>
         </div>
         <div class="comp-row">
-          <span class="label-mono">배경 설정</span>
+          <span class="label-mono">BACKGROUND</span>
           <div class="bg-swatches" id="bgSwatches">
-            <div class="swatch active" data-bg="#f8f9fa" style="background:#f8f9fa"></div>
+            <div class="swatch active" data-bg="#f5f5f7" style="background:#f5f5f7"></div>
             <div class="swatch" data-bg="#ffffff" style="background:#ffffff"></div>
-            <div class="swatch" data-bg="#efe9db" style="background:#efe9db"></div>
-            <div class="swatch" data-bg="#111111" style="background:#111111"></div>
+            <div class="swatch" data-bg="#e8e8ed" style="background:#e8e8ed"></div>
+            <div class="swatch" data-bg="#1d1d1f" style="background:#1d1d1f"></div>
             <div class="swatch swatch-custom" style="background:conic-gradient(red,yellow,lime,cyan,blue,magenta,red)">
-              <input type="color" id="customBg" value="#f8f9fa">
+              <input type="color" id="customBg" value="#f5f5f7">
             </div>
           </div>
         </div>
         <div class="comp-btns">
-          <button class="btn btn-coral" id="genCompBtn">랜덤 구성 생성 (실시간 중첩) ✦</button>
-          <button class="btn" id="clearCompBtn">모두 지우기</button>
-          <button class="btn" id="downloadCompBtn">PNG 저장</button>
+          <button class="btn btn-accent" id="genCompBtn">GENERATE RANDOM ✦</button>
+          <button class="btn" id="clearCompBtn">CLEAR</button>
+          <button class="btn btn-ghost" id="downloadCompBtn">SAVE PNG</button>
         </div>
-        <p class="hint-note">팁: 구성 화면 안의 요소를 마우스로 선택 후 자유롭게 드래그하여 배치 구조를 직접 다층 조절할 수 있습니다.</p>
       </div>
     </section>
 
   </div>
 
-  <footer>NU-ABSTRACT STUDIO · 로컬 메모리 구동 · 새로고침하면 임시 표본이 초기화됩니다</footer>
+  <footer>NU-ABSTRACT STUDIO · Local Memory · Samples are cleared on refresh</footer>
 </div>
 
 <div class="toast" id="toast"></div>
 
-<!-- GitHub Load Modal (신규) -->
+<!-- GitHub Load Modal (기본 선택 해제 및 6열 구조 적용) -->
 <div class="modal-backdrop" id="ghLoadModal">
   <div class="modal wide">
-    <h2>온라인 아카이브 불러오기</h2>
-    <p class="hint">저장소에서 발견된 오브젝트 목록입니다. 이미 불러온 파일은 제외됩니다.<br>원하는 항목을 선택 후 [불러오기]를 누르세요.</p>
+    <h2>ONLINE ARCHIVE LOAD</h2>
+    <p class="hint">Found objects in the repository. Already loaded files are excluded.<br>Select desired items and click [LOAD].</p>
     <div class="gh-load-grid" id="ghLoadList"></div>
     <div class="modal-btns">
-      <button class="btn btn-ghost" id="ghLoadCancel">취소</button>
-      <button class="btn btn-violet" id="ghLoadSubmit">선택한 항목 불러오기</button>
+      <button class="btn btn-ghost" id="ghLoadCancel">CANCEL</button>
+      <button class="btn btn-accent" id="ghLoadSubmit">LOAD SELECTED</button>
     </div>
   </div>
 </div>
 
 <div class="modal-backdrop" id="ghModal">
   <div class="modal">
-    <h2>GitHub 저장소 연결</h2>
-    <p class="hint">등록한 오브젝트 PNG를 GitHub 저장소로 자동 커밋합니다.<br>아카이브 페이지는 이 저장소를 읽어 그림들을 랜덤 콜라주로 표시합니다.</p>
+    <h2>GITHUB CONNECTION</h2>
+    <p class="hint">Auto-commits registered PNGs to a GitHub repo.</p>
 
     <div class="field">
-      <label>소유자 (Owner)</label>
-      <input type="text" id="ghOwner" placeholder="예: myusername" autocomplete="off">
+      <label>Owner</label>
+      <input type="text" id="ghOwner" placeholder="e.g., myusername" autocomplete="off">
     </div>
     <div class="field">
-      <label>저장소 이름 (Repository)</label>
-      <input type="text" id="ghRepo" placeholder="예: nu-abstract" autocomplete="off">
+      <label>Repository</label>
+      <input type="text" id="ghRepo" placeholder="e.g., nu-abstract" autocomplete="off">
     </div>
     <div class="field">
-      <label>브랜치 (Branch)</label>
+      <label>Branch</label>
       <input type="text" id="ghBranch" placeholder="main" value="main" autocomplete="off">
     </div>
     <div class="field">
-      <label>저장 경로 (Path prefix)</label>
+      <label>Path Prefix</label>
       <input type="text" id="ghPath" placeholder="gallery" value="gallery" autocomplete="off">
-      <span class="sub">이 폴더 아래 <code style="color:var(--violet);">YYYY-MM-DD/pattern_*.png</code> 형태로 저장됩니다.</span>
     </div>
     <div class="field">
       <label>Personal Access Token (PAT)</label>
       <input type="password" id="ghToken" placeholder="ghp_..." autocomplete="off">
-      <span class="sub">
-        <a href="https://github.com/settings/tokens?type=beta" target="_blank">GitHub Fine-grained token</a>을 발급받아 해당 저장소의 <b>Contents: Read and write</b> 권한을 부여하세요.
-      </span>
     </div>
 
     <div class="warn-box">
-      ⚠ 토큰은 이 브라우저의 localStorage에만 저장되며 서버로 전송되지 않습니다.
+      ⚠ Token is stored locally in the browser and not sent to any other server.
     </div>
 
     <div class="modal-btns">
-      <button class="btn btn-ghost" id="ghModalCancel">취소</button>
-      <button class="btn btn-coral" id="ghModalDisconnect">연결 해제</button>
-      <button class="btn btn-violet" id="ghModalSave">저장 & 연결 테스트</button>
+      <button class="btn btn-ghost" id="ghModalCancel">CANCEL</button>
+      <button class="btn btn-danger" id="ghModalDisconnect">DISCONNECT</button>
+      <button class="btn btn-accent" id="ghModalSave">SAVE & TEST</button>
     </div>
   </div>
 </div>
@@ -669,7 +622,7 @@
   const actions = [];   
   const redoStack = [];
   const objects = [];        
-  const loadedFilenames = new Set(); // 중복 방지 세트
+  const loadedFilenames = new Set();
   let objCounter = 0;
   let currentVarTarget = null;
   let variationsCache = [];
@@ -692,6 +645,22 @@
     toast._t = setTimeout(()=> el.classList.remove('show'), 2400);
   }
 
+  // ==================== HOTKEYS (단축키 영문화/추가) ====================
+  window.addEventListener('keydown', e => {
+    if(e.target.tagName === 'INPUT') return;
+    if(e.ctrlKey || e.metaKey) {
+      if(e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if(e.shiftKey) { $('redoBtn').click(); }
+        else { $('undoBtn').click(); }
+      }
+    } else {
+      if(e.key.toLowerCase() === 'b') { document.querySelector('[data-tool="brush"]').click(); }
+      if(e.key.toLowerCase() === 'p') { document.querySelector('[data-tool="fill"]').click(); }
+      if(e.key.toLowerCase() === 'e') { document.querySelector('[data-tool="eraser"]').click(); }
+    }
+  });
+
   // ==================== TRACING IMAGE ====================
   $('btnLoadTrace').addEventListener('click', () => $('inputTrace').click());
   $('inputTrace').addEventListener('change', e => {
@@ -700,7 +669,7 @@
     const url = URL.createObjectURL(f);
     $('traceImage').src = url;
     $('traceImage').style.display = 'block';
-    e.target.value = ''; // 동일 파일 재선택 허용
+    e.target.value = ''; 
   });
   $('traceOpacity').addEventListener('input', e => {
     $('traceImage').style.opacity = e.target.value / 100;
@@ -736,13 +705,13 @@
       status.textContent = `${baseDirHandle.name} / ${todayFolderName()}/`;
     } else {
       chip.classList.remove('connected');
-      status.textContent = hasFSAccess ? '미연결 (다운로드로 저장)' : '브라우저 미지원 → 다운로드 저장';
+      status.textContent = hasFSAccess ? 'Unlinked (Downloads)' : 'Unsupported (Downloads)';
     }
   }
 
   async function connectFolder(){
     if(!hasFSAccess){
-      toast('이 브라우저는 폴더 연결을 지원하지 않습니다. 저장은 다운로드로 이루어집니다.');
+      toast('Folder API not supported on this browser. Saving via downloads.');
       return;
     }
     try {
@@ -752,12 +721,12 @@
         const req = await baseDirHandle.requestPermission({ mode: 'readwrite' });
         if(req !== 'granted'){
           baseDirHandle = null;
-          toast('폴더 쓰기 권한이 거부되었습니다.');
+          toast('Folder write permission denied.');
           updateFolderChip();
           return;
         }
       }
-      toast(`저장 폴더 연결: ${baseDirHandle.name}`);
+      toast(`Folder Linked: ${baseDirHandle.name}`);
       updateFolderChip();
     } catch(e){
       if(e.name !== 'AbortError') console.error(e);
@@ -802,7 +771,7 @@
       status.textContent = `${ghConfig.owner}/${ghConfig.repo}`;
     } else {
       chip.classList.remove('gh-connected');
-      status.textContent = '미연결';
+      status.textContent = 'Unlinked';
     }
   }
 
@@ -820,7 +789,7 @@
   }
 
   async function commitToGitHub(canvas, filename, dateFolder){
-    if(!ghConfig || !ghConfig.token) throw new Error('GitHub 설정이 없습니다.');
+    if(!ghConfig || !ghConfig.token) throw new Error('No GitHub config.');
     const { owner, repo, branch, path, token } = ghConfig;
     const pathPrefix = (path || 'gallery').replace(/^\/+|\/+$/g,'');
     const fullPath = `${pathPrefix}/${dateFolder}/${filename}`;
@@ -845,7 +814,7 @@
     });
     if(!res.ok){
       const err = await res.json().catch(()=>({}));
-      throw new Error(`GitHub 커밋 실패 (${res.status}): ${err.message || res.statusText}`);
+      throw new Error(`GitHub Commit Failed (${res.status}): ${err.message || res.statusText}`);
     }
     return fullPath;
   }
@@ -861,7 +830,7 @@
     });
     if(!res.ok){
       const err = await res.json().catch(()=>({}));
-      throw new Error(`저장소 확인 실패 (${res.status}): ${err.message || res.statusText}`);
+      throw new Error(`Repo Access Failed (${res.status}): ${err.message || res.statusText}`);
     }
     return await res.json();
   }
@@ -880,14 +849,14 @@
         const blob = await canvasToBlob(canvas);
         await writable.write(blob);
         await writable.close();
-        results.push(`로컬: ${dateFolder}/`);
+        results.push(`Local: ${dateFolder}/`);
       } catch(e){
         console.error(e);
-        results.push(`로컬 실패`);
+        results.push(`Local Failed`);
       }
     } else if(!ghConfig){
       saveViaDownload(canvas, filename);
-      results.push(`다운로드: ${filename}`);
+      results.push(`Downloaded: ${filename}`);
     }
 
     if(ghConfig && ghConfig.token){
@@ -896,7 +865,7 @@
         results.push(`GitHub: ${path}`);
       } catch(e){
         console.error(e);
-        results.push(`GitHub 실패: ${e.message}`);
+        results.push(`GitHub Failed: ${e.message}`);
       }
     }
     toast(results.join(' · '));
@@ -907,7 +876,6 @@
     return new Promise((resolve, reject)=>{
       if(!file.type.startsWith('image/')){ resolve(null); return; }
       
-      // 중복 로드 방지
       if(loadedFilenames.has(file.name)){
         resolve(null);
         return;
@@ -919,15 +887,17 @@
         const c = document.createElement('canvas');
         c.width = img.width; c.height = img.height;
         const cx = c.getContext('2d');
+        // Disable smoothing
+        cx.imageSmoothingEnabled = false;
         cx.drawImage(img, 0, 0);
         URL.revokeObjectURL(url);
         const bbox = getBBox(c);
         const finalC = bbox ? cropCanvas(c, bbox) : c;
         
-        addObject(finalC, null, file.name); // 파일명 전달
+        addObject(finalC, null, file.name); 
         resolve(finalC);
       };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('이미지 로드 실패: '+file.name)); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image Load Failed: '+file.name)); };
       img.src = url;
     });
   }
@@ -935,7 +905,7 @@
   async function loadImagesFromFileList(files){
     const arr = Array.from(files).filter(f => f.type.startsWith('image/'));
     if(arr.length === 0){
-      toast('이미지 파일을 찾을 수 없습니다.');
+      toast('No image files found.');
       return;
     }
     let ok = 0;
@@ -945,11 +915,10 @@
         if(res) ok++; 
       } catch(e){ console.error(e); }
     }
-    if(ok > 0) toast(`${ok}개 표본을 새로 불러왔습니다.`);
-    else toast(`새로운 표본이 없습니다 (모두 중복됨).`);
+    if(ok > 0) toast(`${ok} objects loaded.`);
+    else toast(`No new objects (all duplicated).`);
   }
 
-  // ---- 이벤트 바인딩: 폴더 연결 / 파일 열기 / 폴더 불러오기 ----
   $('connectFolderBtn').addEventListener('click', connectFolder);
   $('openFilesBtn').addEventListener('click', ()=> $('fileInput').click());
   $('fileInput').addEventListener('change', async (e)=>{
@@ -959,15 +928,15 @@
     }
   });
 
-  // ==================== GITHUB 선택적 불러오기 (NEW) ====================
+  // ==================== GITHUB 선택적 불러오기 ====================
   let ghPendingFiles = [];
 
   $('loadFolderBtn').addEventListener('click', async ()=>{
     if(!ghConfig || !ghConfig.owner || !ghConfig.repo || !ghConfig.token){
-      toast('먼저 상단의 [GitHub · 설정]에서 저장소를 연결해주세요.');
+      toast('Please configure GitHub first at the top.');
       return;
     }
-    toast('저장소를 스캔 중입니다...');
+    toast('Scanning repository...');
     await scanGitHubAndShowModal();
   });
 
@@ -994,7 +963,6 @@
       for(const it of items){
         if(it.type === 'dir') await walk(it.path);
         else if(it.type === 'file' && /\.(png|jpe?g|webp)$/i.test(it.name)){
-          // 중복 필터링
           if(!loadedFilenames.has(it.name)) {
             files.push({ name: it.name, downloadUrl: it.download_url });
           }
@@ -1006,12 +974,12 @@
       await walk(pathPrefix);
     } catch(e){
       console.error(e);
-      toast('스캔 실패: ' + e.message);
+      toast('Scan Failed: ' + e.message);
       return;
     }
 
     if(files.length === 0){
-      toast('가져올 새로운 이미지가 없습니다 (모두 이미 추가됨).');
+      toast('No new images to load (all already added).');
       return;
     }
 
@@ -1026,8 +994,7 @@
     ghPendingFiles.forEach((f, idx) => {
       const el = document.createElement('div');
       el.className = 'gh-item';
-      // 기본적으로 모두 선택 상태
-      el.classList.add('selected');
+      // Default unchecked (선택 해제된 상태)
       el.dataset.idx = idx;
 
       const img = document.createElement('img');
@@ -1062,7 +1029,7 @@
     const selectedIdx = Array.from(selectedNodes).map(n => parseInt(n.dataset.idx));
     
     if(selectedIdx.length === 0){
-      toast('선택된 항목이 없습니다.');
+      toast('No items selected.');
       return;
     }
 
@@ -1070,7 +1037,7 @@
     const filesToLoad = selectedIdx.map(i => ghPendingFiles[i]);
     ghPendingFiles = [];
 
-    toast(`${filesToLoad.length}개 이미지 다운로드 중…`);
+    toast(`Downloading ${filesToLoad.length} images…`);
     let ok = 0;
     for(let i = 0; i < filesToLoad.length; i++){
       const f = filesToLoad[i];
@@ -1082,11 +1049,11 @@
         await loadImageFile(file);
         ok++;
         if((i + 1) % 5 === 0 || i === filesToLoad.length - 1){
-          toast(`불러오는 중… ${i + 1}/${filesToLoad.length}`);
+          toast(`Loading… ${i + 1}/${filesToLoad.length}`);
         }
       } catch(e){ console.error(f.name, e); }
     }
-    toast(`온라인에서 ${ok}개 표본을 불러왔습니다.`);
+    toast(`${ok} objects loaded from online.`);
   });
 
   // ---- 드래그 & 드롭 ----
@@ -1123,7 +1090,7 @@
       } else if(e.dataTransfer.files){
         for(const f of e.dataTransfer.files) files.push(f);
       }
-      if(files.length === 0){ toast('이미지 파일을 찾을 수 없습니다.'); return; }
+      if(files.length === 0){ toast('No image files found.'); return; }
       await loadImagesFromFileList(files);
     });
 
@@ -1183,7 +1150,7 @@
     $('ghOwner').value = ''; $('ghRepo').value = '';
     $('ghBranch').value = 'main'; $('ghPath').value = 'gallery';
     $('ghToken').value = '';
-    toast('GitHub 연결이 해제되었습니다.');
+    toast('GitHub disconnected.');
     closeGhModal();
   });
 
@@ -1196,20 +1163,20 @@
       token:  $('ghToken').value.trim(),
     };
     if(!cfg.owner || !cfg.repo || !cfg.token){
-      toast('소유자·저장소·토큰은 필수입니다.');
+      toast('Owner, Repo, and Token are required.');
       return;
     }
     const btn = $('ghModalSave');
-    btn.disabled = true; btn.textContent = '확인 중…';
+    btn.disabled = true; btn.textContent = 'TESTING…';
     try {
       const info = await testGitHubAccess(cfg);
       saveGhConfig(cfg);
-      toast(`연결 성공: ${info.full_name} (${info.private ? '비공개' : '공개'})`);
+      toast(`Connected: ${info.full_name} (${info.private ? 'Private' : 'Public'})`);
       closeGhModal();
     } catch(e){
       toast(e.message);
     } finally {
-      btn.disabled = false; btn.textContent = '저장 & 연결 테스트';
+      btn.disabled = false; btn.textContent = 'SAVE & TEST';
     }
   });
 
@@ -1227,60 +1194,30 @@
   function rgbToHex(r,g,b){
     return '#' + [r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');
   }
-  function hslToHex(h,s,l){
-    s/=100; l/=100;
-    const k = n => (n + h/30) % 12;
-    const a = s * Math.min(l, 1-l);
-    const f = n => l - a*Math.max(-1, Math.min(k(n)-3, Math.min(9-k(n), 1)));
-    return rgbToHex(255*f(0), 255*f(8), 255*f(4));
-  }
-  function hexToHsl(hex){
-    const [r,g,b] = hexToRgb(hex).map(v=>v/255);
-    const max = Math.max(r,g,b), min = Math.min(r,g,b);
-    let h=0, s=0; const l=(max+min)/2;
-    if(max!==min){
-      const d = max-min;
-      s = l>0.5 ? d/(2-max-min) : d/(max+min);
-      switch(max){
-        case r: h=(g-b)/d + (g<b?6:0); break;
-        case g: h=(b-r)/d + 2; break;
-        case b: h=(r-g)/d + 4; break;
-      }
-      h *= 60;
-    }
-    return [h, s*100, l*100];
-  }
-  function shiftColor(hex, hueDelta, satMul, lightMul){
-    let [h,s,l] = hexToHsl(hex);
-    h = (h + hueDelta + 360) % 360;
-    s = Math.min(100, Math.max(0, s*satMul));
-    l = Math.min(96, Math.max(4, l*lightMul));
-    return hslToHex(h, s, l);
-  }
 
   function buildPalette(){
     return [
-      '#ff0000', '#ff5500', '#ffaa00', '#ffff00',
-      '#66ff00', '#00ff66', '#00ffff', '#0066ff',
-      '#0000ff', '#7700ff', '#ff00ff', '#ff0066'
+      '#ff3b30', '#ff9500', '#ffcc00', '#4cd964',
+      '#5ac8fa', '#007aff', '#5856d6', '#ff2d55',
+      '#1d1d1f', '#86868b', '#e5e5ea', '#ffffff'
     ];
   }
   const PALETTE = buildPalette();
 
   const drawCanvas = $('drawCanvas');
   const dctx = drawCanvas.getContext('2d', {willReadFrequently:true});
-  dctx.lineCap = 'round';
-  dctx.lineJoin = 'round';
+  // Disable smoothing for pixel-perfect bucket fill support
+  dctx.imageSmoothingEnabled = false;
 
   let actionCounter = 0;
   let selectedStrokeId = null;
 
   let currentTool = 'brush';       
-  let strokeColor = '#111111';
-  let fillColor = '#ff5555';
+  let strokeColor = '#1d1d1f';
+  let fillColor = '#ff3b30';
   let activeColorTarget = 'stroke'; 
   let brushSize = 8;
-  let tolerance = 32;
+  let tolerance = 0; // Default 0 for crisp pixels
   let drawing = false;
   let currentAction = null;
 
@@ -1293,6 +1230,7 @@
       const size = brushSize * (rect.width / 1080);
       cursorCircle.style.width = size + 'px';
       cursorCircle.style.height = size + 'px';
+      cursorCircle.style.borderRadius = '0'; // Square cursor to match square brush
       if (e) {
         cursorCircle.style.left = (e.clientX - rect.left) + 'px';
         cursorCircle.style.top = (e.clientY - rect.top) + 'px';
@@ -1308,7 +1246,7 @@
     const size = Math.max(4, Math.min(32, brushSize));
     dot.style.width = size + 'px';
     dot.style.height = size + 'px';
-    dot.style.background = currentTool === 'eraser' ? '#cfcfcf' : strokeColor;
+    dot.style.background = currentTool === 'eraser' ? '#d2d2d7' : strokeColor;
     updateCursorState();
   }
 
@@ -1319,10 +1257,10 @@
   }
 
   function updatePaletteLabel(){
-    if(selectedStrokeId != null){ $('paletteTargetLabel').textContent = '선택된 선 색상 편집 중'; }
-    else if(currentTool === 'select'){ $('paletteTargetLabel').textContent = '편집할 선을 캔버스에서 선택하세요'; }
-    else if(activeColorTarget === 'fill'){ $('paletteTargetLabel').textContent = '채우기 색상 편집 중'; }
-    else { $('paletteTargetLabel').textContent = '선 색상 편집 중'; }
+    if(selectedStrokeId != null){ $('paletteTargetLabel').textContent = 'EDITING SELECTED STROKE'; }
+    else if(currentTool === 'select'){ $('paletteTargetLabel').textContent = 'SELECT STROKE ON CANVAS'; }
+    else if(activeColorTarget === 'fill'){ $('paletteTargetLabel').textContent = 'EDITING FILL COLOR'; }
+    else { $('paletteTargetLabel').textContent = 'EDITING STROKE COLOR'; }
   }
 
   function setActiveColorTarget(target){
@@ -1338,22 +1276,33 @@
     updatePaletteLabel();
   }
 
-  function applyStrokeStyle(){
-    dctx.lineWidth = brushSize;
-    if(currentTool === 'eraser'){
-      dctx.globalCompositeOperation = 'destination-out';
-      dctx.strokeStyle = 'rgba(0,0,0,1)';
-    } else {
-      dctx.globalCompositeOperation = 'source-over';
-      dctx.strokeStyle = strokeColor;
-    }
-  }
-
   function getPos(e){
     const rect = drawCanvas.getBoundingClientRect();
     const scaleX = drawCanvas.width / rect.width;
     const scaleY = drawCanvas.height / rect.height;
     return { x:(e.clientX-rect.left)*scaleX, y:(e.clientY-rect.top)*scaleY };
+  }
+
+  // ==================== PIXEL PERFECT (ALIASED) DRAWING ====================
+  // 브레즌햄 선 그리기 (계단 현상 그대로, 부드러운 효과 없음) -> 버킷 채우기 완벽 호환
+  function drawAliasedLine(ctx, x0, y0, x1, y1, size, color, isEraser) {
+    x0 = Math.floor(x0); y0 = Math.floor(y0);
+    x1 = Math.floor(x1); y1 = Math.floor(y1);
+    const dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    const dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy, e2;
+    
+    ctx.fillStyle = isEraser ? 'rgba(0,0,0,1)' : color;
+    ctx.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over';
+    
+    const offset = Math.floor(size / 2);
+    while (true) {
+      ctx.fillRect(x0 - offset, y0 - offset, size, size);
+      if (x0 === x1 && y0 === y1) break;
+      e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x0 += sx; }
+      if (e2 <= dx) { err += dx; y0 += sy; }
+    }
   }
 
   function floodFillApply(ctx, seedX, seedY, hexColor, tol){
@@ -1400,25 +1349,15 @@
   function renderStrokeFull(ctx, action){
     const pts = action.points;
     if(pts.length===0) return;
-    ctx.save();
-    ctx.lineCap='round'; ctx.lineJoin='round';
-    ctx.lineWidth = action.width;
-    if(action.tool==='eraser'){ ctx.globalCompositeOperation='destination-out'; ctx.strokeStyle='rgba(0,0,0,1)'; }
-    else { ctx.globalCompositeOperation='source-over'; ctx.strokeStyle=action.color; }
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
+    const isEraser = action.tool === 'eraser';
+    
     if(pts.length===1){
-      ctx.lineTo(pts[0].x+0.1, pts[0].y+0.1);
+      drawAliasedLine(ctx, pts[0].x, pts[0].y, pts[0].x, pts[0].y, action.width, action.color, isEraser);
     } else {
-      for(let i=2;i<pts.length;i++){
-        const mid = {x:(pts[i-1].x+pts[i].x)/2, y:(pts[i-1].y+pts[i].y)/2};
-        ctx.quadraticCurveTo(pts[i-1].x, pts[i-1].y, mid.x, mid.y);
+      for(let i=1; i<pts.length; i++){
+        drawAliasedLine(ctx, pts[i-1].x, pts[i-1].y, pts[i].x, pts[i].y, action.width, action.color, isEraser);
       }
-      const last = pts[pts.length-1];
-      ctx.lineTo(last.x, last.y);
     }
-    ctx.stroke();
-    ctx.restore();
   }
 
   function drawSelectionHighlight(a){
@@ -1430,9 +1369,9 @@
     const pad = a.width/2 + 10;
     minX-=pad; minY-=pad; maxX+=pad; maxY+=pad;
     dctx.save();
-    dctx.strokeStyle = '#8b5cf6';
-    dctx.lineWidth = 3;
-    dctx.setLineDash([10,8]);
+    dctx.strokeStyle = '#1d1d1f';
+    dctx.lineWidth = 2;
+    dctx.setLineDash([8,6]);
     dctx.strokeRect(minX, minY, maxX-minX, maxY-minY);
     dctx.restore();
   }
@@ -1513,11 +1452,7 @@
     drawing = true;
     drawCanvas.setPointerCapture(e.pointerId);
     currentAction = { type:'stroke', id:++actionCounter, tool:currentTool, color:strokeColor, width:brushSize, points:[p] };
-    applyStrokeStyle();
-    dctx.beginPath();
-    dctx.moveTo(p.x, p.y);
-    dctx.lineTo(p.x+0.1, p.y+0.1);
-    dctx.stroke();
+    drawAliasedLine(dctx, p.x, p.y, p.x, p.y, brushSize, strokeColor, currentTool === 'eraser');
   });
 
   drawCanvas.addEventListener('pointermove', e=>{
@@ -1527,11 +1462,9 @@
     currentAction.points.push(p);
     const pts = currentAction.points;
     const l = pts.length;
-    if(l > 2){
-      const mid = { x:(pts[l-2].x+p.x)/2, y:(pts[l-2].y+p.y)/2 };
-      applyStrokeStyle();
-      dctx.quadraticCurveTo(pts[l-2].x, pts[l-2].y, mid.x, mid.y);
-      dctx.stroke();
+    if(l > 1){
+      const prev = pts[l-2];
+      drawAliasedLine(dctx, prev.x, prev.y, p.x, p.y, brushSize, strokeColor, currentTool === 'eraser');
     }
   });
 
@@ -1541,7 +1474,6 @@
   function endStroke(){
     if(drawing){
       drawing = false;
-      dctx.beginPath();
       if(currentAction && currentAction.points.length>0){
         actions.push(currentAction);
         redoStack.length = 0; 
@@ -1554,26 +1486,26 @@
 
   $('undoBtn').addEventListener('click', () => {
     if (actions.length === 0) {
-      toast('되돌릴 드로잉 기록이 없습니다.');
+      toast('Nothing to undo.');
       return;
     }
     const undoneAction = actions.pop();
     redoStack.push(undoneAction);
     clearStrokeSelection();
     renderAll();
-    toast('직전 드로잉 단계를 되돌렸습니다.');
+    toast('Undo successful.');
   });
 
   $('redoBtn').addEventListener('click', () => {
     if (redoStack.length === 0) {
-      toast('다시 실행할 앞선 드로잉 기록이 없습니다.');
+      toast('Nothing to redo.');
       return;
     }
     const redoneAction = redoStack.pop();
     actions.push(redoneAction);
     clearStrokeSelection();
     renderAll();
-    toast('되돌렸던 단계를 다시 실행했습니다.');
+    toast('Redo successful.');
   });
 
   document.querySelectorAll('.tool-select .tool-btn:not(.tool-clear-btn)').forEach(btn=>{
@@ -1664,7 +1596,7 @@
     actions.length = 0;
     redoStack.length = 0;
     clearStrokeSelection();
-    toast('캔버스 드로잉이 초기화되었습니다.');
+    toast('Canvas reset.');
   });
 
   updateColorPreviews();
@@ -1693,7 +1625,9 @@
   function cropCanvas(canvas, bbox){
     const c = document.createElement('canvas');
     c.width = bbox.w; c.height = bbox.h;
-    c.getContext('2d').drawImage(canvas, bbox.minX, bbox.minY, bbox.w, bbox.h, 0, 0, bbox.w, bbox.h);
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(canvas, bbox.minX, bbox.minY, bbox.w, bbox.h, 0, 0, bbox.w, bbox.h);
     return c;
   }
 
@@ -1726,7 +1660,7 @@
     objCounter++;
     const obj = { id: objCounter, canvas, w: canvas.width, h: canvas.height, recipe: recipe || null, filename };
     objects.push(obj);
-    if(filename) loadedFilenames.add(filename); // 중복 방지를 위한 기록
+    if(filename) loadedFilenames.add(filename);
     renderGallery();
     updateStat();
     return obj;
@@ -1750,16 +1684,18 @@
   function makeThumbCanvas(srcCanvas){
     const c = document.createElement('canvas');
     c.width = srcCanvas.width; c.height = srcCanvas.height;
-    c.getContext('2d').drawImage(srcCanvas,0,0);
+    const cx = c.getContext('2d');
+    cx.imageSmoothingEnabled = false;
+    cx.drawImage(srcCanvas,0,0);
     return c;
   }
 
   function renderGallery(){
     const grid = $('objectsGrid');
     grid.innerHTML = '';
-    $('objCount').textContent = objects.length + '개';
+    $('objCount').textContent = objects.length;
     if(objects.length === 0){
-      grid.innerHTML = '<p class="empty-hint">아직 등록된 오브젝트가 없습니다.<br>왼쪽에서 그림을 그리고 등록해보세요.</p>';
+      grid.innerHTML = '<p class="empty-hint">No objects registered yet.<br>Draw and register from the left panel.</p>';
       return;
     }
     objects.forEach(obj=>{
@@ -1781,13 +1717,13 @@
 
       const varBtn = document.createElement('button');
       varBtn.className = 'btn btn-sm';
-      varBtn.textContent = '베리에이션';
+      varBtn.textContent = 'VARIATION';
       varBtn.addEventListener('click', ()=> selectForVariation(obj));
       actionsRow.appendChild(varBtn);
 
       const delBtn = document.createElement('button');
-      delBtn.className = 'btn btn-sm btn-coral';
-      delBtn.textContent = '삭제';
+      delBtn.className = 'btn btn-sm btn-danger';
+      delBtn.textContent = 'DEL';
       delBtn.addEventListener('click', ()=> removeObject(obj.id));
       actionsRow.appendChild(delBtn);
 
@@ -1799,13 +1735,13 @@
   $('registerBtn').addEventListener('click', async ()=>{
     const bbox = getBBox(drawCanvas);
     if(!bbox){
-      toast('캔버스에 그림을 먼저 그려주세요.');
+      toast('Draw something on canvas first.');
       return;
     }
     const cropped = cropCanvas(drawCanvas, bbox);
     const recipe = buildRecipeForBBox(bbox);
     const obj = addObject(cropped, recipe);
-    toast(`OBJ-${String(objCounter).padStart(2,'0')} 등록 완료 (${cropped.width}×${cropped.height})`);
+    toast(`Registered OBJ-${String(objCounter).padStart(2,'0')} (${cropped.width}×${cropped.height})`);
     if(!$('keepAfterRegister').checked){
       actions.length = 0;
       redoStack.length = 0;
@@ -1815,77 +1751,11 @@
       await savePatternToFolder(cropped, obj.id);
     } catch (err) {
       console.error(err);
-      toast('저장 중 오류: ' + (err.message || err));
+      toast('Save error: ' + (err.message || err));
     }
   });
 
   // ================= REFINED VARIATION ENGINE =================
-  // 중복(레이어 복제) 없이, 공간 워프(형태 변형)와 약간의 색상 변경만 적용.
-  function applyDirectionalJitter(pts, amp) {
-    if (pts.length < 2) return pts;
-    return pts.map((p, i) => {
-      let next = pts[i + 1] || p;
-      let prev = pts[i - 1] || p;
-      let dx = next.x - prev.x;
-      let dy = next.y - prev.y;
-      let len = Math.hypot(dx, dy) || 1;
-      let nx = -dy / len; 
-      let ny = dx / len;  
-
-      let shiftNormal = rand(-amp, amp) * 1.5;
-      let shiftTangent = rand(-amp, amp) * 1.0;
-      return {
-        x: p.x + nx * shiftNormal + (dx / len) * shiftTangent,
-        y: p.y + ny * shiftNormal + (dy / len) * shiftTangent
-      };
-    });
-  }
-
-  function drawSinglePath(ctx, pts) {
-    if (pts.length === 0) return;
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) {
-      ctx.lineTo(pts[i].x, pts[i].y);
-    }
-    ctx.stroke();
-  }
-
-  function pathLen(pts){
-    let L = 0;
-    for(let i=1; i<pts.length; i++){
-      L += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
-    }
-    return L;
-  }
-
-  function resamplePts(pts, n){
-    if(pts.length<2) return pts.slice();
-    const L = pathLen(pts);
-    if(L===0) return pts.slice(0,1);
-    const step = L/(n-1);
-    const out = [ {x:pts[0].x, y:pts[0].y} ];
-    let acc = 0, i = 1;
-    let prev = pts[0];
-    while(out.length < n-1 && i < pts.length){
-      const seg = Math.hypot(pts[i].x-prev.x, pts[i].y-prev.y);
-      if(acc + seg >= step){
-        const t = (step-acc)/seg;
-        const np = { x: prev.x + t*(pts[i].x-prev.x), y: prev.y + t*(pts[i].y-prev.y) };
-        out.push(np);
-        prev = np;
-        acc = 0;
-      } else {
-        acc += seg;
-        prev = pts[i];
-        i++;
-      }
-    }
-    while(out.length < n-1) out.push({x:pts[pts.length-1].x, y:pts[pts.length-1].y});
-    out.push({x:pts[pts.length-1].x, y:pts[pts.length-1].y});
-    return out;
-  }
-
   function buildWarp(st, obj){
     const cxRef = obj.w / 2;
     const cyRef = obj.h / 2;
@@ -1923,157 +1793,75 @@
         return { x: cxRef + dx * cs - dy * sn, y: cyRef + dx * sn + dy * cs };
       };
     }
-    if(st.warp === 'noise'){
-      const amp = rand(st.noiseAmp[0], st.noiseAmp[1]);
-      const s1  = rand(0, 100), s2 = rand(0, 100);
-      return (p)=>{
-        const nx = Math.sin(p.x * 0.020 + s1) * Math.cos(p.y * 0.017 + s2) * amp
-                 + Math.sin(p.x * 0.045 + s2) * 0.35 * amp;
-        const ny = Math.cos(p.x * 0.019 + s2) * Math.sin(p.y * 0.023 + s1) * amp
-                 + Math.cos(p.y * 0.038 + s1) * 0.35 * amp;
-        return { x: p.x + nx, y: p.y + ny };
-      };
-    }
-    if(st.warp === 'shear'){
-      const shX = signedRand(st.shearRange[0], st.shearRange[1]);
-      const shY = signedRand(st.shearRange[0], st.shearRange[1]);
-      return (p)=>({
-        x: p.x + (p.y - cyRef) * shX,
-        y: p.y + (p.x - cxRef) * shY,
-      });
-    }
     return (p)=> p;
   }
 
-  // 중복 렌더링이 제거된 형태 왜곡과 단일 렌더링 방식의 스타일들
   const VAR_STYLES = [
-    { label:'유기적 웨이브', warp:'wave', waveAmp:[7, 15], jitter: 0.6, widthMul: 1.0, hueRange:[-60, 60], satRange:[0.9, 1.1], lightRange:[0.9, 1.1] },
-    { label:'라디얼 벌지', warp:'bulge', bulgeRange:[0.15, 0.32], jitter: 0.6, widthMul: 1.0, hueRange:[-60, 60], satRange:[0.9, 1.1], lightRange:[0.9, 1.1] },
-    { label:'회전 트위스트', warp:'twist', twistRange:[0.28, 0.65], jitter: 0.5, widthMul: 1.0, hueRange:[-60, 60], satRange:[0.9, 1.1], lightRange:[0.9, 1.1] },
-    { label:'코히런트 노이즈', warp:'noise', noiseAmp:[5, 11], jitter: 0.5, widthMul: 1.0, hueRange:[-60, 60], satRange:[0.9, 1.1], lightRange:[0.9, 1.1] },
-    { label:'공간 비틀림(셰어)', warp:'shear', shearRange:[0.05, 0.14], jitter: 0.8, widthMul: 1.1, hueRange:[-60, 60], satRange:[0.9, 1.1], lightRange:[0.9, 1.1] }
+    { label:'ORGANIC WAVE', warp:'wave', waveAmp:[7, 15] },
+    { label:'RADIAL BULGE', warp:'bulge', bulgeRange:[0.15, 0.32] },
+    { label:'ROTATIONAL TWIST', warp:'twist', twistRange:[0.28, 0.65] }
   ];
 
   function makeVariation(obj, styleIdx){
     const st = VAR_STYLES[styleIdx % VAR_STYLES.length];
-    if(!obj.recipe || obj.recipe.length === 0) return makeTransformVariation(obj, st);
-
-    const maxDim = Math.max(obj.w, obj.h);
-    const size = Math.ceil(maxDim * 2.0) + 120;
-    const centerX = size/2, centerY = size/2;
-
-    const angle = rand(-12, 12) * Math.PI/180;
-    const baseScale = rand(0.9, 1.1);
-    const scaleX = baseScale * rand(0.95, 1.05);
-    const scaleY = baseScale * rand(0.95, 1.05);
-
-    const colorPalette = [];
-    for(let i = 0; i < 3; i++){
-      colorPalette.push({
-        hue:   rand(st.hueRange[0],   st.hueRange[1]),
-        sat:   rand(st.satRange[0],   st.satRange[1]),
-        light: rand(st.lightRange[0], st.lightRange[1]),
-      });
-    }
-    const pickShift = () => colorPalette[Math.floor(Math.random() * colorPalette.length)];
-    const pickColor = (hex) => {
-      const s = pickShift();
-      return shiftColor(hex, s.hue, s.sat, s.light);
-    };
-
-    const warpFn = buildWarp(st, obj);
-
-    function transformPt(p){
-      const w = warpFn(p);
-      const dx = (w.x - obj.w/2) * scaleX;
-      const dy = (w.y - obj.h/2) * scaleY;
-      return {
-        x: dx*Math.cos(angle) - dy*Math.sin(angle) + centerX,
-        y: dx*Math.sin(angle) + dy*Math.cos(angle) + centerY
-      };
-    }
-
-    const c = document.createElement('canvas');
-    c.width = size; c.height = size;
-    const cx = c.getContext('2d');
-    const redrawnActions = [];
-
-    obj.recipe.forEach(a=>{
-      if(a.type === 'stroke'){
-        let pts = resamplePts(a.points, Math.max(16, Math.floor(a.points.length * 1.1)));
-        let finalPts = null;
-        let finalWidth = a.width;
-        let finalColor = a.color;
-
-        cx.save();
-        cx.lineCap = 'round'; cx.lineJoin = 'round';
-
-        if(a.tool === 'eraser'){
-          cx.globalCompositeOperation = 'destination-out';
-          cx.strokeStyle = 'rgba(0,0,0,1)';
-          finalWidth = Math.max(1.5, a.width * baseScale);
-          cx.lineWidth = finalWidth;
-          let jittered = applyDirectionalJitter(pts, st.jitter);
-          finalPts = jittered.map(transformPt);
-          drawSinglePath(cx, finalPts);
-        } else {
-          cx.globalCompositeOperation = 'source-over';
-          // 단 한 번만 선을 그립니다. (중복 방지)
-          const strokeShift = pickShift();
-          finalColor = shiftColor(a.color, strokeShift.hue, strokeShift.sat, strokeShift.light);
-          cx.strokeStyle = finalColor;
-
-          let jittered = applyDirectionalJitter(pts, st.jitter);
-          finalPts = jittered.map(transformPt);
-          finalWidth = Math.max(1, a.width * st.widthMul);
-          cx.lineWidth = finalWidth;
-          drawSinglePath(cx, finalPts);
-        }
-        cx.restore();
-
-        if (finalPts && finalPts.length > 0) {
-          redrawnActions.push({
-            type:'stroke', tool:a.tool, color: finalColor, width: finalWidth, points: finalPts
-          });
-        }
-      } else if(a.type === 'fill'){
-        const finalSeed = transformPt({x:a.x, y:a.y});
-        const shiftedFillColor = pickColor(a.color);
-        floodFillApply(cx, finalSeed.x, finalSeed.y, shiftedFillColor, a.tolerance);
-        redrawnActions.push({ type:'fill', x:finalSeed.x, y:finalSeed.y, color:shiftedFillColor, tolerance:a.tolerance });
-      }
-    });
-
-    const bbox = getBBox(c);
-    if(!bbox) return { canvas:c, recipe:null, label:st.label };
-    const cropped = cropCanvas(c, bbox);
-    const recipeForStorage = redrawnActions.map(a=>{
-      if(a.type==='stroke'){
-        return { type:'stroke', tool:a.tool, color:a.color, width:a.width, points:a.points.map(p=>({x:p.x-bbox.minX, y:p.y-bbox.minY})) };
-      }
-      return { type:'fill', x:a.x-bbox.minX, y:a.y-bbox.minY, color:a.color, tolerance:a.tolerance };
-    });
-    return { canvas: cropped, recipe: recipeForStorage, label: st.label };
-  }
-
-  function makeTransformVariation(obj, st){
+    
     const size = Math.max(obj.w, obj.h) + 60;
     const c = document.createElement('canvas');
     c.width = size; c.height = size;
     const cx = c.getContext('2d');
+    cx.imageSmoothingEnabled = false;
 
-    const hueShift = rand(st.hueRange[0], st.hueRange[1]);
-    const satMul   = rand(st.satRange[0], st.satRange[1]);
+    // Use recipe if available to redraw cleanly
+    if(obj.recipe && obj.recipe.length > 0) {
+      const centerX = size/2, centerY = size/2;
+      const angle = rand(-10, 10) * Math.PI/180;
+      const baseScale = rand(0.9, 1.1);
+      const warpFn = buildWarp(st, obj);
 
+      function transformPt(p){
+        const w = warpFn(p);
+        const dx = (w.x - obj.w/2) * baseScale;
+        const dy = (w.y - obj.h/2) * baseScale;
+        return {
+          x: dx*Math.cos(angle) - dy*Math.sin(angle) + centerX,
+          y: dx*Math.sin(angle) + dy*Math.cos(angle) + centerY
+        };
+      }
+
+      const redrawnActions = [];
+      obj.recipe.forEach(a=>{
+        if(a.type === 'stroke'){
+          let pts = a.points;
+          let finalPts = pts.map(transformPt);
+          
+          if(finalPts.length===1){
+            drawAliasedLine(cx, finalPts[0].x, finalPts[0].y, finalPts[0].x, finalPts[0].y, a.width, a.color, a.tool==='eraser');
+          } else {
+            for(let i=1; i<finalPts.length; i++){
+              drawAliasedLine(cx, finalPts[i-1].x, finalPts[i-1].y, finalPts[i].x, finalPts[i].y, a.width, a.color, a.tool==='eraser');
+            }
+          }
+          redrawnActions.push({ type:'stroke', tool:a.tool, color:a.color, width:a.width, points: finalPts });
+        } else if(a.type === 'fill'){
+          const finalSeed = transformPt({x:a.x, y:a.y});
+          floodFillApply(cx, finalSeed.x, finalSeed.y, a.color, a.tolerance);
+          redrawnActions.push({ type:'fill', x:finalSeed.x, y:finalSeed.y, color:a.color, tolerance:a.tolerance });
+        }
+      });
+      
+      const bbox = getBBox(c);
+      if(!bbox) return { canvas:c, recipe:null, label:st.label };
+      return { canvas: cropCanvas(c, bbox), recipe: redrawnActions, label: st.label };
+    }
+
+    // Fallback for imported images
     cx.translate(size/2, size/2);
-    cx.rotate(rand(-30, 30) * Math.PI/180);
-    cx.scale(rand(0.8, 1.2), rand(0.8, 1.2));
-    cx.filter = `hue-rotate(${hueShift.toFixed(1)}deg) saturate(${satMul.toFixed(2)})`;
+    cx.rotate(rand(-20, 20) * Math.PI/180);
+    cx.scale(rand(0.85, 1.15), rand(0.85, 1.15));
     cx.drawImage(obj.canvas, -obj.w/2, -obj.h/2, obj.w, obj.h);
-    cx.filter = 'none';
 
     const bbox = getBBox(c);
-    const label = (st && st.label) ? st.label : '구조 변경';
+    const label = (st && st.label) ? st.label : 'STRUCTURAL WARP';
     if(!bbox) return { canvas:c, recipe:null, label };
     return { canvas: cropCanvas(c, bbox), recipe:null, label };
   }
@@ -2112,11 +1900,11 @@
       card.appendChild(tag);
       const addBtn = document.createElement('button');
       addBtn.className = 'btn btn-sm btn-full';
-      addBtn.textContent = '표본으로 추가';
+      addBtn.textContent = 'ADD TO SAMPLES';
       addBtn.addEventListener('click', async ()=>{
         const c = makeThumbCanvas(vc.canvas);
         const obj = addObject(c, vc.recipe);
-        toast('베리에이션이 표본 보관함에 추가되었습니다.');
+        toast('Variation added.');
         try { await savePatternToFolder(c, obj.id); } catch(e){ console.error(e); }
       });
       card.appendChild(addBtn);
@@ -2133,7 +1921,7 @@
       const obj = addObject(c, vc.recipe);
       added.push({ c, id: obj.id });
     }
-    toast('베리에이션 전체를 표본으로 추가했습니다.');
+    toast('Added all variations.');
     for(const it of added){
       try { await savePatternToFolder(it.c, it.id); } catch(e){ console.error(e); }
     }
@@ -2143,7 +1931,8 @@
   // ================= LAYOUT INTERACTIVE COMPOSITION =================
   const compCanvas = $('compCanvas');
   const cctx = compCanvas.getContext('2d');
-  let compBg = '#f8f9fa';
+  cctx.imageSmoothingEnabled = false;
+  let compBg = '#f5f5f7';
 
   function paintCompBg(){
     cctx.clearRect(0,0,compCanvas.width, compCanvas.height);
@@ -2159,13 +1948,11 @@
     off.width  = Math.ceil(w + pad * 2);
     off.height = Math.ceil(h + pad * 2);
     const octx = off.getContext('2d');
+    octx.imageSmoothingEnabled = false;
 
     const r = haloPx;
     const d = haloPx * 0.7071;
-    const offsets = [
-      [-r, 0], [r, 0], [0, -r], [0, r],
-      [-d, -d], [d, -d], [-d, d], [d, d]
-    ];
+    const offsets = [[-r, 0], [r, 0], [0, -r], [0, r], [-d, -d], [d, -d], [-d, d], [d, d]];
     for(const [dx, dy] of offsets){
       octx.drawImage(item.obj.canvas, pad + dx, pad + dy, w, h);
     }
@@ -2199,9 +1986,7 @@
       try {
         const octx = item.obj.canvas.getContext('2d');
         item.obj._alphaData = octx.getImageData(0, 0, item.obj.w, item.obj.h).data;
-      } catch(e){
-        return true;
-      }
+      } catch(e){ return true; }
     }
     const idx = (sy * item.obj.w + sx) * 4 + 3;
     return item.obj._alphaData[idx] > 20;
@@ -2214,7 +1999,7 @@
       const h = item.obj.h * item.scale;
 
       if (idx === selectedItemIdx) {
-        drawShapeHalo(cctx, item, '#ff5555', 7);
+        drawShapeHalo(cctx, item, '#1d1d1f', 7);
       }
 
       cctx.save();
@@ -2323,12 +2108,12 @@
     selectedItemIdx = null;
     $('compItemEditor').hidden = true;
     renderComposition();
-    toast('선택한 요소가 삭제되었습니다.');
+    toast('Element deleted.');
   });
 
   $('genCompBtn').addEventListener('click', () => {
     if(objects.length === 0){
-      toast('먼저 표본을 하나 이상 등록해주세요.');
+      toast('Register at least one object first.');
       return;
     }
     
@@ -2357,7 +2142,7 @@
     }
 
     renderComposition();
-    toast(`구성을 전면 리셋한 후 새로운 랜덤 스택 구조 ${n}개를 배치했습니다.`);
+    toast(`Generated ${n} elements.`);
   });
 
   document.querySelectorAll('#bgSwatches .swatch[data-bg]').forEach(sw=>{
