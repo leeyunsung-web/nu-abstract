@@ -68,6 +68,28 @@
   }
   .btn-link:hover{border-color:var(--lime);color:var(--lime);}
 
+  /* ---------- background color picker ---------- */
+  .bg-picker{
+    display:flex;align-items:center;gap:6px;
+    border:1px solid var(--border);padding:5px 8px;border-radius:3px;
+    background:rgba(30,30,36,0.7);backdrop-filter:blur(6px);
+  }
+  .bg-picker .label{font-family:var(--mono);font-size:10px;color:var(--ink-dim);letter-spacing:0.3px;margin-right:2px;}
+  .bg-swatch{
+    width:18px;height:18px;border-radius:50%;cursor:pointer;
+    border:2px solid transparent;box-shadow:0 0 0 1px var(--border);
+    padding:0;
+  }
+  .bg-swatch.active{border-color:var(--ink);}
+  .bg-swatch-custom{
+    position:relative;overflow:hidden;
+    background:conic-gradient(red,yellow,lime,cyan,blue,magenta,red);
+  }
+  .bg-swatch-custom input[type=color]{
+    position:absolute;top:-4px;left:-4px;width:30px;height:30px;
+    border:none;padding:0;cursor:pointer;opacity:0;
+  }
+
   /* ---------- stage ---------- */
   .stage{position:fixed;inset:0;overflow:hidden;background:var(--bg);}
   .stage::before{
@@ -168,6 +190,18 @@
     </div>
   </div>
   <div class="top-actions">
+    <div class="bg-picker" id="bgPicker">
+      <span class="label">BG</span>
+      <button class="bg-swatch active" data-bg="#17171b" style="background:#17171b" title="다크"></button>
+      <button class="bg-swatch" data-bg="#ffffff" style="background:#ffffff" title="화이트"></button>
+      <button class="bg-swatch" data-bg="#efe9db" style="background:#efe9db" title="크림"></button>
+      <button class="bg-swatch" data-bg="#0f0f12" style="background:#0f0f12" title="블랙"></button>
+      <button class="bg-swatch" data-bg="#1a2f2b" style="background:#1a2f2b" title="딥그린"></button>
+      <button class="bg-swatch" data-bg="#2b1a2f" style="background:#2b1a2f" title="딥퍼플"></button>
+      <label class="bg-swatch bg-swatch-custom" title="커스텀 컬러">
+        <input type="color" id="customBg" value="#17171b">
+      </label>
+    </div>
     <div class="chip"><span class="dot">●</span> <span id="statChip">LOADING…</span></div>
     <button class="btn violet" id="reshuffleBtn">↻ 재배치</button>
     <a class="btn-link" href="index.html">← 스튜디오</a>
@@ -203,8 +237,38 @@
   const $ = id => document.getElementById(id);
   const GH_STORAGE_KEY = 'objet_studio_gh_config';       // 스튜디오와 공유 (토큰 재사용)
   const ARCHIVE_STORAGE_KEY = 'objet_studio_archive_cfg'; // 아카이브 전용 (owner/repo 만)
+  const BG_STORAGE_KEY = 'objet_studio_archive_bg';       // 배경색
 
   const stage = $('stage');
+
+  // ---------------- background color ----------------
+  function applyBackground(color){
+    document.body.style.background = color;
+    document.querySelector('.stage').style.background = color;
+    // 스와치 active 표시
+    document.querySelectorAll('.bg-swatch[data-bg]').forEach(sw => {
+      sw.classList.toggle('active', sw.dataset.bg === color);
+    });
+    $('customBg').value = color;
+  }
+  function loadBackground(){
+    const saved = localStorage.getItem(BG_STORAGE_KEY);
+    if(saved) applyBackground(saved);
+  }
+  function saveBackground(color){
+    localStorage.setItem(BG_STORAGE_KEY, color);
+    applyBackground(color);
+  }
+  loadBackground();
+
+  document.querySelectorAll('.bg-swatch[data-bg]').forEach(sw => {
+    sw.addEventListener('click', () => saveBackground(sw.dataset.bg));
+  });
+  $('customBg').addEventListener('input', e => {
+    // 커스텀 컬러 선택 시 프리셋 active 해제
+    document.querySelectorAll('.bg-swatch[data-bg]').forEach(sw => sw.classList.remove('active'));
+    saveBackground(e.target.value);
+  });
 
   // ---------------- config ----------------
   function loadConfig(){
