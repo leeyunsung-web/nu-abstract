@@ -459,6 +459,20 @@
   }
   .mgr-node:hover .node-del { display: flex; }
   .mgr-empty { grid-column: 1/-1; text-align: center; font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); padding: 40px; }
+  .mgr-selinfo { font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); margin-right: 4px; }
+  .mgr-node.selected { border-color: var(--ink); box-shadow: 0 0 0 2px var(--ink); }
+  .mgr-node .node-check {
+    position: absolute; top: 4px; left: 4px; width: 18px; height: 18px; z-index: 3;
+    accent-color: var(--ink); cursor: pointer; margin: 0;
+  }
+  .mgr-node.is-file .node-tag { left: 26px; }
+  .mgr-node .node-rename {
+    position: absolute; bottom: 3px; right: 3px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--ink-dim); font-family: var(--font-mono);
+    font-size: 8px; padding: 2px 5px; border-radius: 5px; cursor: pointer; display: none; font-weight: 600;
+  }
+  .mgr-node:hover .node-rename { display: block; }
+  .mgr-node .node-rename:hover { border-color: var(--ink); color: var(--ink); }
 </style>
 </head>
 <body>
@@ -631,8 +645,8 @@
 
       <div class="io-controls">
         <div class="io-controls-row">
-          <button class="btn btn-sm" id="openFilesBtn">💾 OFFLINE LOAD</button>
-          <button class="btn btn-sm btn-accent" id="loadFolderBtn">🌐 ONLINE LOAD</button>
+          <button class="btn btn-sm" id="openFilesBtn">OFFLINE LOAD</button>
+          <button class="btn btn-sm btn-accent" id="loadFolderBtn">ONLINE LOAD</button>
         </div>
         <p class="io-hint">Offline: Select local PNGs · Online: Load from connected GitHub repo.<br>Auto-saves to <code>gallery/YYYY-MM-DD/</code>.</p>
         <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" multiple hidden>
@@ -780,9 +794,12 @@
 <div class="modal-backdrop" id="mgrModal">
   <div class="modal wide">
     <h2>보관함 정리 · ARCHIVE MANAGER</h2>
-    <p class="hint">Drag a file onto a folder to move it in · drag onto “.. UP” to move out · double-click a folder to open. Create/delete folders and delete files below.</p>
+    <p class="hint">Double-click a folder to open · drag a file onto a folder to move it · check files to select, then DELETE SELECTED · rename folders with the RENAME action.</p>
     <div class="mgr-toolbar">
       <div class="mgr-crumbs" id="mgrCrumbs"><b>gallery</b></div>
+      <span class="mgr-selinfo" id="mgrSelInfo"></span>
+      <button class="btn btn-sm btn-ghost" id="mgrSelectAll">SELECT ALL</button>
+      <button class="btn btn-sm btn-danger" id="mgrDeleteSelected" style="display:none;">DELETE SELECTED</button>
       <button class="btn btn-sm" id="mgrNewFolder">+ NEW FOLDER</button>
       <button class="btn btn-sm btn-ghost" id="mgrRefresh">↻ REFRESH</button>
     </div>
@@ -1595,6 +1612,8 @@
   let mgrCurrentPath = '';       // relative to repo root, e.g. "gallery/2024-01-01"
   let mgrRootPath = 'gallery';
   let mgrDragName = null;         // filename being dragged
+  let mgrCurrentFiles = [];       // file items currently shown
+  const mgrSelected = new Set();  // selected file paths for bulk delete
 
   function ghApiBase(){ return `https://api.github.com/repos/${ghConfig.owner}/${ghConfig.repo}`; }
   function ghHeaders(){
@@ -1693,6 +1712,8 @@
     catch(e){ grid.innerHTML = `<div class="mgr-empty">Error: ${e.message}</div>`; return; }
 
     grid.innerHTML = '';
+    mgrSelected.clear();
+    updateMgrSelInfo();
 
     // ".. UP" node (also a drop target to move file out one level)
     if(mgrCurrentPath !== mgrRootPath){
@@ -1707,6 +1728,7 @@
 
     const dirs = items.filter(i=>i.type==='dir').sort((a,b)=>a.name.localeCompare(b.name));
     const files = items.filter(i=>i.type==='file' && /\.(png|jpe?g|webp|gif)$/i.test(i.name));
+    mgrCurrentFiles = files;
 
     if(dirs.length === 0 && files.length === 0 && mgrCurrentPath === mgrRootPath){
       grid.innerHTML += '<div class="mgr-empty">Empty. Create a folder or register objects.</div>';
@@ -1715,16 +1737,19 @@
     dirs.forEach(d=>{
       const node = document.createElement('div');
       node.className = 'mgr-node';
-      node.innerHTML = `<button class="node-del" title="Delete folder">×</button><div class="node-icon">FOLDER</div><div class="node-name">${d.name}</div>`;
+      node.innerHTML = `<button class="node-del" title="Delete folder">×</button>
+        <button class="node-rename" title="Rename folder">RENAME</button>
+        <div class="node-icon">FOLDER</div><div class="node-name">${d.name}</div>`;
       node.addEventListener('dblclick', ()=>{ mgrCurrentPath = d.path; refreshMgr(); });
       node.querySelector('.node-del').addEventListener('click', (ev)=>{ ev.stopPropagation(); deleteFolder(d.path, d.name); });
+      node.querySelector('.node-rename').addEventListener('click', (ev)=>{ ev.stopPropagation(); renameFolder(d.path, d.name); });
       addDropTarget(node, d.path);
       grid.appendChild(node);
     });
 
     files.forEach(f=>{
       const node = document.createElement('div');
-      node.className = 'mgr-node';
+      node.className = 'mgr-node is-file';
       node.draggable = true;
       node.dataset.path = f.path;
       node.dataset.name = f.name;
@@ -1732,14 +1757,30 @@
       node.dataset.url = f.download_url;
       const tag = roleTagOf(f.name);
       const tagHtml = tag ? `<span class="node-tag ${tag}">${tag.toUpperCase()}</span>` : '';
-      node.innerHTML = `${tagHtml}<button class="node-del" title="Delete file">×</button>
+      node.innerHTML = `<input type="checkbox" class="node-check" title="Select">
+        ${tagHtml}<button class="node-del" title="Delete file">×</button>
         <img class="node-thumb" src="${f.download_url}" loading="lazy" alt="">
         <div class="node-name" title="${f.name}">${f.name}</div>`;
+
+      const chk = node.querySelector('.node-check');
+      chk.addEventListener('click', ev => ev.stopPropagation());
+      chk.addEventListener('change', ()=>{
+        if(chk.checked){ mgrSelected.add(f.path); node.classList.add('selected'); }
+        else { mgrSelected.delete(f.path); node.classList.remove('selected'); }
+        updateMgrSelInfo();
+      });
+
       node.querySelector('.node-del').addEventListener('click', (ev)=>{ ev.stopPropagation(); deleteFileNode(f); });
       node.addEventListener('dragstart', ()=>{ mgrDragName = f.name; node.classList.add('dragging'); node._fileInfo = f; window._mgrDragFile = f; });
       node.addEventListener('dragend', ()=>{ node.classList.remove('dragging'); mgrDragName = null; window._mgrDragFile = null; });
       grid.appendChild(node);
     });
+  }
+
+  function updateMgrSelInfo(){
+    const n = mgrSelected.size;
+    $('mgrSelInfo').textContent = n ? `${n} selected` : '';
+    $('mgrDeleteSelected').style.display = n ? 'inline-block' : 'none';
   }
 
   function parentPath(p){
@@ -1824,10 +1865,76 @@
     } catch(e){ console.error(e); toast('Create failed: ' + e.message); }
   }
 
+  // Rename a folder = copy all contents to new path, then delete the old tree.
+  async function renameFolder(path, oldName){
+    const input = prompt('Rename folder:', oldName);
+    if(input === null) return;
+    const clean = input.trim().replace(/[\/\\?%*:|"<>]/g,'-');
+    if(!clean || clean === oldName) return;
+    const parent = parentPath(path);
+    const newPath = `${parent}/${clean}`.replace(/\/+/g,'/');
+    toast(`Renaming to ${clean}…`);
+    try {
+      await copyFolderRecursive(path, newPath);
+      await deleteFolderRecursive(path);
+      toast('Folder renamed.');
+      await new Promise(r=>setTimeout(r, 600));
+      await refreshMgr();
+    } catch(e){ console.error(e); toast('Rename failed: ' + e.message); }
+  }
+
+  async function copyFolderRecursive(srcPath, destPath){
+    const items = await mgrList(srcPath);
+    // Preserve empty folders with a .gitkeep
+    if(items.length === 0){
+      await mgrPutFile(`${destPath}/.gitkeep`, '', `Rename: create ${destPath}`);
+      return;
+    }
+    for(const it of items){
+      if(it.type === 'dir'){
+        await copyFolderRecursive(it.path, `${destPath}/${it.name}`);
+      } else {
+        const b64 = await mgrGetBase64(it);
+        await mgrPutFile(`${destPath}/${it.name}`, b64, `Rename: copy ${it.name}`);
+      }
+    }
+  }
+
+  async function bulkDeleteSelected(){
+    const paths = Array.from(mgrSelected);
+    if(paths.length === 0) return;
+    if(!confirm(`Delete ${paths.length} selected file(s)? This cannot be undone.`)) return;
+    let ok = 0;
+    for(const p of paths){
+      const f = mgrCurrentFiles.find(x=>x.path===p);
+      if(!f) continue;
+      try {
+        toast(`Deleting ${f.name}…`);
+        await mgrDeleteFile(f.path, f.sha, `Delete ${f.name}`);
+        loadedFilenames.delete(f.name);
+        ok++;
+      } catch(e){ console.error(f.name, e); }
+    }
+    toast(`Deleted ${ok}/${paths.length} file(s).`);
+    await new Promise(r=>setTimeout(r, 600));
+    await refreshMgr();
+  }
+
+  function selectAllFiles(){
+    const boxes = $('mgrGrid').querySelectorAll('.node-check');
+    const anyUnchecked = Array.from(boxes).some(b=>!b.checked);
+    boxes.forEach(b=>{
+      b.checked = anyUnchecked;
+      b.dispatchEvent(new Event('change'));
+    });
+  }
+
   $('openMgrBtn').addEventListener('click', openMgr);
   $('mgrClose').addEventListener('click', closeMgr);
   $('mgrRefresh').addEventListener('click', refreshMgr);
   $('mgrNewFolder').addEventListener('click', createFolder);
+  $('mgrDeleteSelected').addEventListener('click', bulkDeleteSelected);
+  $('mgrSelectAll').addEventListener('click', selectAllFiles);
   $('mgrModal').addEventListener('click', e=>{ if(e.target === $('mgrModal')) closeMgr(); });
 
   function updateStat(){

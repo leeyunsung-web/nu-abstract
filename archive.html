@@ -401,15 +401,18 @@
 
     const n = shuffled.length;
     let sizeMin, sizeMax;
-    if(n <= 6){        sizeMin = vw * 0.18; sizeMax = vw * 0.32; }
-    else if(n <= 15){  sizeMin = vw * 0.12; sizeMax = vw * 0.24; }
-    else if(n <= 30){  sizeMin = vw * 0.08; sizeMax = vw * 0.18; }
-    else if(n <= 60){  sizeMin = vw * 0.06; sizeMax = vw * 0.14; }
-    else {             sizeMin = vw * 0.05; sizeMax = vw * 0.11; }
+    // Wider spread so items vary dramatically in size (like the composition view)
+    if(n <= 6){        sizeMin = vw * 0.12; sizeMax = vw * 0.40; }
+    else if(n <= 15){  sizeMin = vw * 0.07; sizeMax = vw * 0.30; }
+    else if(n <= 30){  sizeMin = vw * 0.05; sizeMax = vw * 0.22; }
+    else if(n <= 60){  sizeMin = vw * 0.04; sizeMax = vw * 0.17; }
+    else {             sizeMin = vw * 0.03; sizeMax = vw * 0.13; }
     if(vw < vh) { sizeMin *= 0.9; sizeMax *= 0.9; }
 
     shuffled.forEach((img, i) => {
-      const size = rand(sizeMin, sizeMax);
+      // Skewed random so there's a good mix of small and large pieces
+      const t = Math.pow(Math.random(), 1.6); // bias toward smaller, with occasional large
+      const size = sizeMin + t * (sizeMax - sizeMin);
       const el = document.createElement('div');
       el.className = 'collage-item';
 
@@ -417,8 +420,8 @@
         el: el,
         x: rand(-size * 0.15, vw - size * 0.85),
         y: rand(-size * 0.15, vh - size * 0.85),
-        scale: rand(0.94, 1.06),
-        rotate: rand(-25, 25),
+        scale: rand(0.6, 1.5),   // extra per-item scale variety
+        rotate: rand(-30, 30),
         width: size,
         height: size
       };
