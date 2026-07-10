@@ -2137,6 +2137,10 @@
     actions.forEach(a=>{
       if(a.type==='stroke') renderStrokeFull(dctx, a);
       else if(a.type==='fill') floodFillApply(dctx, a.x, a.y, a.color, a.tolerance);
+      else if(a.type==='image' && a.img){
+        dctx.imageSmoothingEnabled = false;
+        dctx.drawImage(a.img, a.x, a.y, a.w, a.h);
+      }
     });
     if(selectedStrokeId != null){
       const sel = actions.find(a=>a.id===selectedStrokeId);
@@ -2185,7 +2189,20 @@
     renderAll();
   }
 
+  // Prevent right-click context menu and tablet barrel-button (secondary) drawing on the canvas
+  drawCanvas.addEventListener('contextmenu', e => e.preventDefault());
+  traceImg.addEventListener('contextmenu', e => e.preventDefault());
+
   drawCanvas.addEventListener('pointerdown', e=>{
+    // Ignore any non-primary input: right mouse button, middle button, or a pen with the
+    // barrel/secondary button pressed. buttons bitmask: 1=tip/left, 2=barrel/right, 4=middle.
+    // Only a lone primary contact (button 0, buttons 1) is allowed to draw.
+    const isSecondary = (e.button !== 0) || (e.buttons != null && e.buttons !== 0 && e.buttons !== 1);
+    if(isSecondary){
+      e.preventDefault();
+      return;
+    }
+
     const p = getPos(e);
 
     if(eyedropperActive){
@@ -2478,6 +2495,13 @@
       const actionsRow = document.createElement('div');
       actionsRow.className = 'obj-actions';
 
+      const loadBtn = document.createElement('button');
+      loadBtn.className = 'btn btn-sm btn-accent';
+      loadBtn.textContent = 'TO DRAWING';
+      loadBtn.title = 'Load this sample onto the drawing canvas';
+      loadBtn.addEventListener('click', ()=> loadSampleToDrawing(obj));
+      actionsRow.appendChild(loadBtn);
+
       const varBtn = document.createElement('button');
       varBtn.className = 'btn btn-sm';
       varBtn.textContent = 'VARIATION';
@@ -2496,6 +2520,45 @@
       card.appendChild(actionsRow);
       grid.appendChild(card);
     });
+  }
+
+  // Load a sample (from panel 02) back onto the 01 drawing canvas.
+  // Vector samples (with a recipe) load as fully editable strokes/fills, centered.
+  // Raster-only samples load as an image layer, centered.
+  function loadSampleToDrawing(obj){
+    const cw = drawCanvas.width, ch = drawCanvas.height;
+    const offX = Math.round((cw - obj.w) / 2);
+    const offY = Math.round((ch - obj.h) / 2);
+
+    if(obj.recipe && obj.recipe.length > 0){
+      obj.recipe.forEach(a=>{
+        if(a.type === 'stroke'){
+          actions.push({
+            type:'stroke', id:++actionCounter, tool:a.tool, color:a.color, width:a.width,
+            points: a.points.map(p=>({ x:p.x + offX, y:p.y + offY }))
+          });
+        } else if(a.type === 'fill'){
+          actions.push({
+            type:'fill', id:++actionCounter, x:a.x + offX, y:a.y + offY,
+            color:a.color, tolerance:a.tolerance
+          });
+        }
+      });
+      redoStack.length = 0;
+      clearStrokeSelection();
+      renderAll();
+      toast(`Loaded OBJ-${String(obj.id).padStart(2,'0')} to drawing (editable).`);
+    } else {
+      // Raster sample: stamp its pixels as an image layer
+      const img = document.createElement('canvas');
+      img.width = obj.w; img.height = obj.h;
+      img.getContext('2d').drawImage(obj.canvas, 0, 0);
+      actions.push({ type:'image', id:++actionCounter, img, x:offX, y:offY, w:obj.w, h:obj.h });
+      redoStack.length = 0;
+      clearStrokeSelection();
+      renderAll();
+      toast(`Loaded OBJ-${String(obj.id).padStart(2,'0')} to drawing (image).`);
+    }
   }
 
   $('registerBtn').addEventListener('click', async ()=>{
