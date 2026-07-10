@@ -2059,6 +2059,8 @@
       if (e2 >= dy) { err += dy; x0 += sx; }
       if (e2 <= dx) { err += dx; y0 += sy; }
     }
+    // Always restore default compositing so eraser mode never leaks into later draws.
+    ctx.globalCompositeOperation = 'source-over';
   }
 
   function floodFillApply(ctx, seedX, seedY, hexColor, tol){
@@ -2133,12 +2135,14 @@
   }
 
   function renderAll(){
+    dctx.globalCompositeOperation = 'source-over';
     dctx.clearRect(0,0,drawCanvas.width, drawCanvas.height);
     actions.forEach(a=>{
       try {
         if(a.type==='stroke') renderStrokeFull(dctx, a);
         else if(a.type==='fill') floodFillApply(dctx, a.x, a.y, a.color, a.tolerance);
         else if(a.type==='image' && a.img && a.w > 0 && a.h > 0){
+          dctx.globalCompositeOperation = 'source-over';
           dctx.imageSmoothingEnabled = false;
           dctx.drawImage(a.img, a.x, a.y, a.w, a.h);
         }
@@ -2146,6 +2150,7 @@
         console.error('renderAll: skipped an action due to error', err, a);
       }
     });
+    dctx.globalCompositeOperation = 'source-over';
     if(selectedStrokeId != null){
       const sel = actions.find(a=>a.id===selectedStrokeId);
       if(sel) drawSelectionHighlight(sel);
@@ -2534,6 +2539,7 @@
   // Raster-only samples load as an image layer, centered.
   function loadSampleToDrawing(obj){
     if(!obj){ toast('Sample not found.'); return; }
+    dctx.globalCompositeOperation = 'source-over';
     try {
       const cw = drawCanvas.width, ch = drawCanvas.height;
       const ow = obj.w || (obj.canvas ? obj.canvas.width : 0);
