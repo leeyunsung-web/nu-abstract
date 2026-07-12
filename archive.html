@@ -188,7 +188,7 @@
   <div class="fm-header">ADJUST ELEMENT</div>
   <div class="fm-row">
     <span>Scale</span>
-    <input type="range" id="fmScale" min="0.2" max="4" step="0.05">
+    <input type="range" id="fmScale" min="0.05" max="8" step="0.05">
   </div>
   <div class="fm-row">
     <span>Rotate</span>
@@ -401,17 +401,17 @@
 
     const n = shuffled.length;
     let sizeMin, sizeMax;
-    // Wider spread so items vary dramatically in size (like the composition view)
-    if(n <= 6){        sizeMin = vw * 0.12; sizeMax = vw * 0.40; }
-    else if(n <= 15){  sizeMin = vw * 0.07; sizeMax = vw * 0.30; }
-    else if(n <= 30){  sizeMin = vw * 0.05; sizeMax = vw * 0.22; }
-    else if(n <= 60){  sizeMin = vw * 0.04; sizeMax = vw * 0.17; }
-    else {             sizeMin = vw * 0.03; sizeMax = vw * 0.13; }
-    if(vw < vh) { sizeMin *= 0.9; sizeMax *= 0.9; }
+    // Much wider spread so items vary dramatically in size (tiny specks + huge hero pieces)
+    if(n <= 6){        sizeMin = vw * 0.06; sizeMax = vw * 0.70; }
+    else if(n <= 15){  sizeMin = vw * 0.04; sizeMax = vw * 0.58; }
+    else if(n <= 30){  sizeMin = vw * 0.025; sizeMax = vw * 0.46; }
+    else if(n <= 60){  sizeMin = vw * 0.02; sizeMax = vw * 0.38; }
+    else {             sizeMin = vw * 0.015; sizeMax = vw * 0.30; }
+    if(vw < vh) { sizeMin *= 0.9; sizeMax *= 0.95; }
 
     shuffled.forEach((img, i) => {
       // Skewed random so there's a good mix of small and large pieces
-      const t = Math.pow(Math.random(), 1.6); // bias toward smaller, with occasional large
+      const t = Math.pow(Math.random(), 2.2); // strong bias to small, with occasional very large
       const size = sizeMin + t * (sizeMax - sizeMin);
       const el = document.createElement('div');
       el.className = 'collage-item';
@@ -420,7 +420,7 @@
         el: el,
         x: rand(-size * 0.15, vw - size * 0.85),
         y: rand(-size * 0.15, vh - size * 0.85),
-        scale: rand(0.6, 1.5),   // extra per-item scale variety
+        scale: rand(0.35, 2.2),   // extra per-item scale variety (wider)
         rotate: rand(-30, 30),
         width: size,
         height: size

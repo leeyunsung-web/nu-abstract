@@ -562,7 +562,7 @@
 
       <div class="tool-select">
         <button class="tool-btn active" data-tool="brush" title="Hotkey: B">✎ BRUSH</button>
-        <button class="tool-btn" data-tool="fill" title="Hotkey: P">▨ FILL</button>
+        <button class="tool-btn" data-tool="fill" title="Hotkey: G">▨ FILL</button>
         <button class="tool-btn" data-tool="eraser" title="Hotkey: E">▢ ERASER</button>
         <button class="tool-btn" data-tool="select">◈ SELECT</button>
         <button class="tool-btn tool-clear-btn" id="clearDrawBtn">RESET</button>
@@ -677,7 +677,7 @@
 
       <div class="comp-item-editor" id="compItemEditor" hidden>
         <h3>ADJUST ELEMENT</h3>
-        <p class="hint-note" style="color:var(--ink-dim); margin-top:0;">* Drag the element in the canvas to move it.</p>
+        <p class="hint-note" style="color:var(--ink-dim); margin-top:0;">* Drag the element in the canvas to move it.<br>* Hotkeys: <code>[</code> layer down · <code>]</code> layer up</p>
         <div class="range-row">
           <span>SCALE</span>
           <input type="range" id="itemScale" min="10" max="400" value="100">
@@ -689,8 +689,8 @@
           <span class="val" id="itemAngleVal">0°</span>
         </div>
         <div class="btn-row">
-          <button class="btn btn-ghost" id="sendForwardBtn">FORWARD</button>
-          <button class="btn btn-ghost" id="sendBackwardBtn">BACKWARD</button>
+          <button class="btn btn-ghost" id="sendBackwardBtn" title="Hotkey: [">↓ LAYER [</button>
+          <button class="btn btn-ghost" id="sendForwardBtn" title="Hotkey: ]">↑ LAYER ]</button>
           <button class="btn btn-danger" id="deleteItemBtn">DELETE</button>
         </div>
       </div>
@@ -856,6 +856,9 @@
     $('roleBadge').textContent = isMaster ? 'MASTER' : 'GUEST';
     $('roleName').textContent = isMaster ? 'Master' : 'Guest';
     $('openMgrBtn').style.display = isMaster ? 'inline-flex' : 'none';
+    // GitHub repo config chip: master only (hidden entirely for guests)
+    const ghChip = $('ghChip');
+    if(ghChip) ghChip.style.display = isMaster ? 'flex' : 'none';
     document.body.classList.toggle('role-master', isMaster);
     document.body.classList.toggle('role-guest', !isMaster);
     // Refresh gallery so DEL buttons reflect permissions
@@ -923,11 +926,21 @@
     } else {
       const k = e.key.toLowerCase();
       if(k === 'b') { document.querySelector('[data-tool="brush"]').click(); }
-      if(k === 'p') { document.querySelector('[data-tool="fill"]').click(); }
+      if(k === 'g') { document.querySelector('[data-tool="fill"]').click(); }
       if(k === 'e') { document.querySelector('[data-tool="eraser"]').click(); }
       if(k === 'i') { e.preventDefault(); activateEyedropper(); }
-      if(e.key === '[') { e.preventDefault(); adjustBrushSize(-1); }
-      if(e.key === ']') { e.preventDefault(); adjustBrushSize(1); }
+      // [ / ] : if a COMPOSITION element is selected → move layer down / up (one step)
+      //         otherwise → brush size down / up
+      if(e.key === '[') {
+        e.preventDefault();
+        if(selectedItemIdx !== null) moveItemLayer(-1);
+        else adjustBrushSize(-1);
+      }
+      if(e.key === ']') {
+        e.preventDefault();
+        if(selectedItemIdx !== null) moveItemLayer(1);
+        else adjustBrushSize(1);
+      }
     }
   });
 
@@ -1192,6 +1205,8 @@
   function updateGhChip(){
     const chip = $('ghChip');
     const status = $('ghStatus');
+    // Guests never see the GitHub repo config chip
+    chip.style.display = (userRole === 'master') ? 'flex' : 'none';
     if(ghConfig && ghConfig.owner && ghConfig.repo){
       chip.classList.add('gh-connected');
       status.textContent = `${ghConfig.owner}/${ghConfig.repo}`;
@@ -2520,14 +2535,15 @@
       varBtn.addEventListener('click', ()=> selectForVariation(obj));
       actionsRow.appendChild(varBtn);
 
-      // Delete permission: master only
-      if(userRole === 'master'){
-        const delBtn = document.createElement('button');
-        delBtn.className = 'btn btn-sm btn-danger';
-        delBtn.textContent = 'DEL';
-        delBtn.addEventListener('click', ()=> removeObject(obj.id));
-        actionsRow.appendChild(delBtn);
-      }
+      // Delete from samples list (available to all roles — removes locally only)
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn btn-sm btn-danger';
+      delBtn.textContent = 'DEL';
+      delBtn.title = 'Remove this sample from the list';
+      delBtn.addEventListener('click', ()=>{
+        if(confirm(`Delete OBJ-${String(obj.id).padStart(2,'0')} from samples?`)) removeObject(obj.id);
+      });
+      actionsRow.appendChild(delBtn);
 
       card.appendChild(actionsRow);
       grid.appendChild(card);
@@ -3025,20 +3041,25 @@
     renderComposition();
   });
 
-  $('sendForwardBtn').addEventListener('click', () => {
+  // Move the selected element one layer at a time.
+  // dir = +1 → one layer UP (toward front, hotkey ])
+  // dir = -1 → one layer DOWN (toward back, hotkey [)
+  function moveItemLayer(dir){
     if (selectedItemIdx === null) return;
+    const target = selectedItemIdx + dir;
+    if (target < 0 || target >= placedItems.length) {
+      toast(dir > 0 ? 'Already at the top layer.' : 'Already at the bottom layer.');
+      return;
+    }
     const item = placedItems.splice(selectedItemIdx, 1)[0];
-    placedItems.push(item);
-    selectedItemIdx = placedItems.length - 1;
+    placedItems.splice(target, 0, item);
+    selectedItemIdx = target;
     renderComposition();
-  });
-  $('sendBackwardBtn').addEventListener('click', () => {
-    if (selectedItemIdx === null) return;
-    const item = placedItems.splice(selectedItemIdx, 1)[0];
-    placedItems.unshift(item);
-    selectedItemIdx = 0;
-    renderComposition();
-  });
+    toast(`Layer ${target + 1} / ${placedItems.length}`);
+  }
+
+  $('sendForwardBtn').addEventListener('click', () => moveItemLayer(1));
+  $('sendBackwardBtn').addEventListener('click', () => moveItemLayer(-1));
   $('deleteItemBtn').addEventListener('click', () => {
     if (selectedItemIdx === null) return;
     placedItems.splice(selectedItemIdx, 1);
