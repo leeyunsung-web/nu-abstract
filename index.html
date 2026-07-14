@@ -107,8 +107,35 @@
   #traceControls .tc-btns { display: flex; gap: 6px; }
   #traceControls .tc-btns button { flex: 1; font-size: 10px; padding: 6px 4px; }
   canvas { display: block; image-rendering: auto; } /* smooth display scaling — AA strokes stay smooth on screen */
+  #canvasView {
+    position: absolute; inset: 0; transform-origin: 50% 50%; will-change: transform;
+    box-shadow: 0 0 0 1px var(--border-soft), 0 6px 22px rgba(0,0,0,0.10);
+    background: var(--canvas-bg);
+  }
+  .canvas-frame { background: #e8e8ee; } /* backdrop behind the zoomed-out artboard */
   #drawCanvas {
     position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none;
+  }
+  /* ---------- navigation (view zoom / rotate) ---------- */
+  .nav-wrap {
+    border: 1px solid var(--border); border-radius: 10px; background: var(--panel-alt);
+    padding: 10px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .nav-wrap .nav-row { display: flex; gap: 6px; align-items: center; }
+  .nav-wrap .nav-row input[type=range] { flex: 1; accent-color: var(--ink); }
+  .nav-wrap button {
+    font-family: var(--font-mono); font-size: 11px; padding: 4px 9px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--ink); cursor: pointer;
+    white-space: nowrap;
+  }
+  .nav-wrap button:hover { background: var(--border-soft); }
+  #navInfo { font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); }
+  #navPreview {
+    width: 100%; aspect-ratio: 1/1; display: block; cursor: pointer; touch-action: none;
+    border: 1px solid var(--border); border-radius: 8px;
+    background-image: linear-gradient(45deg, #ececf0 25%, transparent 25%, transparent 75%, #ececf0 75%),
+                      linear-gradient(45deg, #ececf0 25%, transparent 25%, transparent 75%, #ececf0 75%);
+    background-size: 12px 12px; background-position: 0 0, 6px 6px; background-color: #fff;
   }
   
   #canvasCursor {
@@ -138,6 +165,71 @@
   .tool-btn:hover { color: var(--ink); background: var(--panel-alt); }
   .tool-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
   .tool-clear-btn { background: var(--panel); color: var(--danger); font-weight: 600; }
+  /* ---------- Photoshop-style drawing layout: left vertical panel column ---------- */
+  .draw-body { display: flex; gap: 14px; align-items: flex-start; }
+  .draw-sidebar {
+    width: 144px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px;
+    position: sticky; top: 12px;
+  }
+  .draw-sidebar .nav-wrap, .draw-sidebar .palette-wrap, .draw-sidebar .layers-wrap { padding: 8px; }
+  .draw-sidebar .nav-row { flex-wrap: wrap; }
+  .draw-sidebar .nav-wrap button { padding: 3px 7px; }
+  .draw-sidebar .layers-head { flex-wrap: wrap; gap: 4px; }
+  .draw-sidebar .layers-head button { padding: 3px 6px; }
+  .draw-sidebar .layer-row { padding: 5px 6px; gap: 5px; }
+  .draw-sidebar .layer-row .layer-thumb { width: 24px; height: 24px; }
+  .draw-sidebar .layer-row .layer-mini { display: none; } /* act-count badge: no room at 2/3 width */
+  .draw-sidebar .brush-preview { width: 32px; height: 32px; }
+  /* Narrow sidebar: label + value on one line, slider full-width below */
+  .draw-sidebar .range-row { flex-wrap: wrap; min-width: 0; row-gap: 4px; }
+  .draw-sidebar .range-row input[type=range] { flex: 1 1 100%; order: 3; min-width: 0; width: 100%; }
+  .draw-sidebar .range-row .val { margin-left: auto; min-width: 0; }
+  .draw-sidebar .tool-row { gap: 8px; }
+  .draw-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .draw-sidebar .palette-grid { grid-template-columns: repeat(6, 1fr); }
+  .replay-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .replay-row .btn { flex: 1 1 30%; }
+  .replay-row select { flex: 0 1 auto; padding: 6px 8px; }
+  @media (max-width: 1240px) {
+    .draw-body { flex-direction: column; }
+    .draw-sidebar { width: 100%; position: static; }
+  }
+  /* ---------- layers panel ---------- */
+  .layers-wrap {
+    border: 1px solid var(--border); border-radius: 10px; background: var(--panel-alt);
+    padding: 10px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .layers-head { display: flex; align-items: center; justify-content: space-between; }
+  .layers-head span { font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); letter-spacing: 0.4px; }
+  .layers-head .layers-btns { display: flex; gap: 4px; }
+  .layers-head button {
+    font-family: var(--font-mono); font-size: 11px; padding: 4px 8px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--ink); cursor: pointer;
+  }
+  .layers-head button:hover { background: var(--border-soft); }
+  .layer-list { display: flex; flex-direction: column-reverse; gap: 4px; } /* top layer shown first */
+  .layer-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px;
+    border: 1px solid var(--border-soft); background: var(--panel); cursor: pointer;
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink);
+  }
+  .layer-row.active { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+  .layer-row.dragging { opacity: 0.4; }
+  .layer-row.drag-over { outline: 2px dashed var(--ink); outline-offset: 1px; background: var(--border-soft); }
+  .layer-row .layer-eye { cursor: pointer; user-select: none; width: 18px; text-align: center; opacity: 0.9; }
+  .layer-row .layer-thumb {
+    width: 30px; height: 30px; flex-shrink: 0; border: 1px solid var(--border); border-radius: 5px;
+    background-image: linear-gradient(45deg, #e6e6ea 25%, transparent 25%, transparent 75%, #e6e6ea 75%),
+                      linear-gradient(45deg, #e6e6ea 25%, transparent 25%, transparent 75%, #e6e6ea 75%);
+    background-size: 10px 10px; background-position: 0 0, 5px 5px; background-color: #fff;
+  }
+  .layer-row.hidden-layer .layer-name { opacity: 0.35; text-decoration: line-through; }
+  .layer-row .layer-name { flex: 1; }
+  .layer-row .layer-mini {
+    font-size: 10px; padding: 2px 6px; border-radius: 5px; border: 1px solid var(--border);
+    background: var(--panel-alt); cursor: pointer; color: var(--ink-dim);
+  }
+  .layer-row .layer-mini:hover { background: var(--border-soft); color: var(--ink); }
   .tool-clear-btn:hover { background: rgba(255,59,48,0.05); border-color: var(--danger); }
 
   /* ---------- color targets ---------- */
@@ -322,7 +414,7 @@
   .modal p.hint { font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); line-height: 1.6; margin: 0; }
   
   .gh-load-grid {
-    display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; /* 6개씩 작게 */
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; /* 6 per row, small */
     max-height: 450px; overflow-y: auto; padding: 8px; background: var(--panel-alt);
     border: 1px solid var(--border); border-radius: 8px;
   }
@@ -517,7 +609,7 @@
         <button class="link-btn accent" id="connectGhBtn">CONFIG</button>
       </div>
       <a class="archive-link" href="archive.html" target="_blank">ARCHIVE →</a>
-      <button class="link-btn accent" id="openMgrBtn" style="display:none; font-family:var(--font-mono); font-size:11px; padding:8px 12px; border-radius:8px; border:1px solid var(--ink); background:var(--ink); color:#fff; cursor:pointer; font-weight:600;">보관함 정리</button>
+      <button class="link-btn accent" id="openMgrBtn" style="display:none; font-family:var(--font-mono); font-size:11px; padding:8px 12px; border-radius:8px; border:1px solid var(--ink); background:var(--ink); color:#fff; cursor:pointer; font-weight:600;">ARCHIVE MANAGER</button>
       <div class="role-chip" id="roleChip">
         <span class="role-badge" id="roleBadge">GUEST</span>
         <span class="role-name" id="roleName">Guest</span>
@@ -533,6 +625,64 @@
     <section class="panel draw-panel">
       <div class="panel-head"><span class="panel-index">01</span><h2>DRAWING</h2></div>
 
+      <div class="draw-body">
+        <!-- Photoshop-style left vertical menu: layers & everything after -->
+        <aside class="draw-sidebar">
+      <div class="nav-wrap">
+        <canvas id="navPreview" width="240" height="240" title="Preview — click or drag to pan the view"></canvas>
+        <div class="palette-label"><span>NAVIGATION</span><span id="navInfo">100% · 0°</span></div>
+        <div class="nav-row">
+          <button id="zoomOutBtn" title="Zoom out">−</button>
+          <input type="range" id="zoomSlider" min="20" max="400" value="100" title="View zoom">
+          <button id="zoomInBtn" title="Zoom in">＋</button>
+        </div>
+        <div class="nav-row">
+          <button id="rotLeftBtn" title="Rotate view -15°">⟲</button>
+          <button id="rotRightBtn" title="Rotate view +15°">⟳</button>
+          <button id="navResetBtn" style="flex:1;" title="Reset zoom, rotation and pan">RESET</button>
+        </div>
+      </div>
+      <div class="palette-wrap">
+        <div class="palette-label"><span>PRIMARY PALETTE</span></div>
+        <div class="palette-grid" id="paletteGrid"></div>
+        <div class="palette-custom">
+          <span>CUSTOM</span>
+          <input type="color" id="customColorPicker" value="#1d1d1f">
+        </div>
+      </div>
+      <div class="tool-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+        <div class="range-row">
+          <span>SIZE</span>
+          <input type="range" id="brushSize" min="1" max="60" value="8">
+          <span class="val" id="brushSizeVal">8</span>
+        </div>
+        <div class="brush-preview-wrap">
+          <div class="brush-preview"><div id="brushPreviewDot" style="width:8px;height:8px;border-radius:0;"></div></div>
+        </div>
+      </div>
+      <div class="tool-row" id="toleranceRow" style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div class="range-row">
+          <span>TOLERANCE</span>
+          <input type="range" id="tolerance" min="0" max="120" value="0">
+          <span class="val" id="toleranceVal">0</span>
+        </div>
+      </div>
+      <div class="layers-wrap">
+        <div class="layers-head">
+          <span>LAYERS</span>
+          <div class="layers-btns">
+            <button id="layerAddBtn" title="Add layer">＋</button>
+            <button id="layerUpBtn" title="Move active layer up">↑</button>
+            <button id="layerDownBtn" title="Move active layer down">↓</button>
+            <button id="layerDelBtn" title="Delete active layer (its strokes too)">✕</button>
+          </div>
+        </div>
+        <div class="layer-list" id="layerList"></div>
+        <button class="btn btn-sm" id="layerRecolorBtn" title="Recolor everything on the active layer with the selected color">◉ RECOLOR LAYER</button>
+      </div>
+        </aside>
+
+        <div class="draw-main">
       <div class="trace-tools">
         <span>TRACE LAYER:</span>
         <button class="btn btn-sm" id="btnLoadTrace">LOAD</button>
@@ -543,11 +693,13 @@
       </div>
 
       <div class="canvas-frame">
+        <div id="canvasView">
         <div class="paper-bg"></div>
         <img id="traceImage" alt="trace layer">
         <div id="traceSelectBox"></div>
         <canvas id="drawCanvas" width="1080" height="1080"></canvas>
         <div id="canvasCursor"></div>
+        </div>
         <div id="traceControls">
           <div class="tc-title">REFERENCE — ADJUST</div>
           <div class="tc-row"><span>SCALE</span><input type="range" id="traceScale" min="20" max="300" value="100"><span class="tc-val" id="traceScaleVal">1.0x</span></div>
@@ -561,85 +713,21 @@
       </div>
 
       <div class="tool-select">
-        <button class="tool-btn active" data-tool="brush" title="Hotkey: B">✎ BRUSH</button>
-        <button class="tool-btn" data-tool="fill" title="Hotkey: G">▨ FILL</button>
-        <button class="tool-btn" data-tool="eraser" title="Hotkey: E">▢ ERASER</button>
-        <button class="tool-btn" data-tool="select">◈ SELECT</button>
-        <button class="tool-btn tool-clear-btn" id="clearDrawBtn">RESET</button>
+        <button class="tool-btn active" data-tool="brush" title="Hotkey: B">STROKE</button>
+        <button class="tool-btn" data-tool="fill" title="Hotkey: G — fills a region and auto-splits it into a new layer">FILL</button>
+        <button class="tool-btn" data-tool="select" title="Hotkey: V — drag on canvas to move the ACTIVE layer">SELECT</button>
+        <button class="tool-btn" data-tool="eraser" title="Hotkey: E — erases on the ACTIVE layer only">ERASER</button>
+        <button class="tool-btn" id="eyedropperBtn" title="Hotkey: I — click the canvas once to pick a color">EYEDROPPER</button>
       </div>
-
       <div class="history-select" style="display:flex; gap:6px; margin-top:-4px;">
         <button class="tool-btn" id="undoBtn" title="Ctrl+Z">↶ UNDO</button>
         <button class="tool-btn" id="redoBtn" title="Ctrl+Shift+Z">↷ REDO</button>
+        <button class="tool-btn tool-clear-btn" id="clearDrawBtn">RESET</button>
       </div>
-
-      <div class="color-targets">
-        <div class="color-target active" id="strokeTarget">
-          <div class="swatch-preview" id="strokeSwatchPreview" style="background:#111111"></div>
-          <span>STROKE</span>
-        </div>
-        <div class="color-target" id="fillTarget">
-          <div class="swatch-preview" id="fillSwatchPreview" style="background:#ff3b30"></div>
-          <span>FILL</span>
-        </div>
-        <div class="brush-preview-wrap">
-          <div class="brush-preview"><div id="brushPreviewDot" style="width:8px;height:8px;border-radius:0;"></div></div>
-        </div>
-      </div>
-
-      <div class="palette-wrap">
-        <div class="palette-label"><span>PRIMARY PALETTE</span><span id="paletteTargetLabel">EDITING STROKE</span></div>
-        <div class="palette-grid" id="paletteGrid"></div>
-        <div class="palette-custom">
-          <span>CUSTOM</span>
-          <input type="color" id="customColorPicker" value="#111111">
-        </div>
-      </div>
-
-      <div class="tool-row" style="display:flex;gap:10px;flex-wrap:wrap;">
-        <div class="range-row">
-          <span>SIZE</span>
-          <input type="range" id="brushSize" min="1" max="60" value="8">
-          <span class="val" id="brushSizeVal">8</span>
-        </div>
-      </div>
-
-      <p class="hint-note" style="margin-top:-6px;">HOTKEYS · B brush · P fill · E eraser · I eyedropper · [ / ] size − / +</p>
-
-      <div class="tool-row" id="toleranceRow" style="display:flex;gap:10px;flex-wrap:wrap;">
-        <div class="range-row">
-          <span>TOLERANCE</span>
-          <input type="range" id="tolerance" min="0" max="120" value="0">
-          <span class="val" id="toleranceVal">0</span>
-        </div>
-      </div>
-
-      <div class="stroke-editor" id="strokeEditor" hidden>
-        <h3>EDIT SELECTED STROKE</h3>
-        <div class="color-target active" id="selStrokeColorRow" style="cursor:default;">
-          <div class="swatch-preview" id="selStrokeColorPreview" style="background:#111111"></div>
-          <span>Select color from palette above</span>
-        </div>
-        <div class="range-row">
-          <span>SIZE</span>
-          <input type="range" id="selStrokeWidth" min="1" max="60" value="8">
-          <span class="val" id="selStrokeWidthVal">8</span>
-        </div>
-        <div class="btn-row">
-          <button class="btn btn-ghost" id="deselectStrokeBtn">DESELECT</button>
-          <button class="btn btn-danger" id="deleteStrokeBtn">DELETE STROKE</button>
-        </div>
-      </div>
-
-      <label class="checkbox-row">
-        <input type="checkbox" id="keepAfterRegister">
-        Keep drawing after registering
-      </label>
-
-      <button class="btn btn-accent btn-full" id="registerBtn">REGISTER OBJECT →</button>
-      <div style="display:flex; gap:8px; align-items:stretch;">
+      <button class="btn btn-accent btn-full" id="registerBtn" style="margin-top:6px;">REGISTER OBJECT →</button>
+      <div class="replay-row">
         <button class="btn" id="replayBtn" style="flex:1;" title="Replay the drawing process (trace layer hidden)">▶ REPLAY</button>
-        <button class="btn" id="replaySaveBtn" style="flex:1;" title="Replay and save as a .webm video">⏺ REPLAY 저장</button>
+        <button class="btn" id="replaySaveBtn" style="flex:1;" title="Replay and save as a .webm video">⏺ SAVE REPLAY</button>
         <select id="replaySpeed" title="Replay speed" style="font-family:var(--font-mono); font-size:12px; padding:0 8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--ink); cursor:pointer;">
           <option value="0.25">0.25x</option>
           <option value="0.5">0.5x</option>
@@ -651,6 +739,8 @@
           <option value="8">8x</option>
           <option value="10">10x</option>
         </select>
+      </div>
+        </div>
       </div>
     </section>
 
@@ -754,7 +844,7 @@
 
 <div class="toast" id="toast"></div>
 
-<!-- GitHub Load Modal (기본 선택 해제 및 6열 구조 적용) -->
+<!-- GitHub Load Modal (unchecked by default, 6-column grid) -->
 <div class="modal-backdrop" id="ghLoadModal">
   <div class="modal wide">
     <h2>ONLINE ARCHIVE LOAD</h2>
@@ -808,7 +898,7 @@
 <!-- ==================== ARCHIVE MANAGER MODAL ==================== -->
 <div class="modal-backdrop" id="mgrModal">
   <div class="modal wide">
-    <h2>보관함 정리 · ARCHIVE MANAGER</h2>
+    <h2>ARCHIVE MANAGER</h2>
     <p class="hint">Double-click a folder to open · drag a file onto a folder to move it · check files to select, then DELETE SELECTED · rename folders with the RENAME action.</p>
     <div class="mgr-toolbar">
       <div class="mgr-crumbs" id="mgrCrumbs"><b>gallery</b></div>
@@ -929,6 +1019,229 @@
     showLogin();
   })();
 
+  // ==================== LAYER PANEL ====================
+  let layerDragState = null;      // pointer-drag state for layer merging
+  let suppressLayerClick = false; // swallow the click that follows a drag
+  function renderLayersPanel(){
+    const list = $('layerList');
+    list.innerHTML = '';
+    layers.forEach(l=>{
+      const row = document.createElement('div');
+      row.className = 'layer-row' + (l.id === activeLayerId ? ' active' : '') + (l.visible ? '' : ' hidden-layer');
+
+      const eye = document.createElement('span');
+      eye.className = 'layer-eye';
+      eye.textContent = l.visible ? '👁' : '─';
+      eye.title = 'Toggle visibility';
+      eye.addEventListener('click', ev=>{
+        ev.stopPropagation();
+        l.visible = !l.visible;
+        compositeLayers();
+        renderLayersPanel();
+      });
+      row.appendChild(eye);
+
+      // Live thumbnail of the layer's pixels (refreshed on every panel render)
+      const thumb = document.createElement('canvas');
+      thumb.className = 'layer-thumb';
+      thumb.width = 60; thumb.height = 60; // 2x for crisp display at 30px
+      thumb.getContext('2d').drawImage(l.canvas, 0, 0, 60, 60);
+      row.appendChild(thumb);
+
+      const name = document.createElement('span');
+      name.className = 'layer-name';
+      name.textContent = l.name;
+      row.appendChild(name);
+
+      const count = document.createElement('span');
+      count.className = 'layer-mini';
+      count.style.cursor = 'default';
+      count.textContent = actions.filter(a=>a.layer===l.id).length + ' act';
+      row.appendChild(count);
+
+      row.addEventListener('click', ()=>{
+        if(suppressLayerClick){ suppressLayerClick = false; return; }
+        activeLayerId = l.id;
+        renderLayersPanel();
+      });
+
+      // ---- Drag a layer row onto another row → merge the two layers ----
+      // Pointer Events based: works with mouse, touch, and tablet pens alike.
+      row.dataset.layerId = l.id;
+      row.style.touchAction = 'none';
+      row.title = 'Drag onto another layer to merge.';
+      row.addEventListener('pointerdown', ev=>{
+        if(ev.button !== undefined && ev.button !== 0) return;
+        // Never start a layer-drag (or capture the pointer) from the eye:
+        // pointer capture retargets the click to the row, which was silently
+        // breaking the visibility toggle.
+        if(ev.target && ev.target.closest && ev.target.closest('.layer-eye')) return;
+        layerDragState = { id: l.id, row, startX: ev.clientX, startY: ev.clientY, active: false, pid: ev.pointerId };
+        try { row.setPointerCapture(ev.pointerId); } catch(e){}
+      });
+      row.addEventListener('pointermove', ev=>{
+        if(!layerDragState || layerDragState.id !== l.id) return;
+        if(!layerDragState.active){
+          if(Math.hypot(ev.clientX - layerDragState.startX, ev.clientY - layerDragState.startY) < 10) return;
+          layerDragState.active = true;
+          row.classList.add('dragging');
+        }
+        const el = document.elementFromPoint(ev.clientX, ev.clientY);
+        const over = el && el.closest ? el.closest('.layer-row') : null;
+        document.querySelectorAll('.layer-row.drag-over').forEach(r=>r.classList.remove('drag-over'));
+        if(over && over !== row) over.classList.add('drag-over');
+      });
+      const endLayerDrag = ev=>{
+        if(!layerDragState || layerDragState.id !== l.id) return;
+        const wasActive = layerDragState.active;
+        layerDragState = null;
+        row.classList.remove('dragging');
+        document.querySelectorAll('.layer-row.drag-over').forEach(r=>r.classList.remove('drag-over'));
+        if(wasActive && ev.type === 'pointerup'){
+          suppressLayerClick = true;
+          setTimeout(()=>{ suppressLayerClick = false; }, 0);
+          const el = document.elementFromPoint(ev.clientX, ev.clientY);
+          const over = el && el.closest ? el.closest('.layer-row') : null;
+          if(over && over.dataset.layerId){
+            const dropId = parseInt(over.dataset.layerId, 10);
+            if(dropId && dropId !== l.id) mergeLayers(l.id, dropId);
+          }
+        }
+      };
+      row.addEventListener('pointerup', endLayerDrag);
+      row.addEventListener('pointercancel', endLayerDrag);
+
+      list.appendChild(row);
+    });
+  }
+
+  // Merge the DRAGGED layer into the DROP-TARGET layer.
+  // Actions keep their CHRONOLOGICAL order and are simply reassigned to the
+  // target layer. Split fills recompute their region from the state of their
+  // source layers *at that point in time*, so moving actions around in time
+  // (the old stacking reorder) could leave a fill with no boundary yet and
+  // flood the whole canvas — the "background gets filled" bug. Chronological
+  // replay + under-blend fills reproduce the pre-merge look: fills recorded
+  // after strokes tuck underneath them, strokes drawn later paint on top.
+  function mergeLayersCore(dragId, dropId){
+    const di = layers.findIndex(l=>l.id===dragId);
+    const ti = layers.findIndex(l=>l.id===dropId);
+    if(di < 0 || ti < 0) return false;
+    const drag = layers[di], target = layers[ti];
+
+    // Reassign ownership; fill actions that referenced the dragged layer as
+    // a flood SOURCE are remapped too.
+    actions.forEach(a=>{
+      if(a.layer === drag.id) a.layer = target.id;
+      if(a.src) a.src = [...new Set(a.src.map(id => id === drag.id ? target.id : id))];
+    });
+
+    layers.splice(di, 1);
+    if(activeLayerId === drag.id) activeLayerId = target.id;
+    return true;
+  }
+
+  function mergeLayers(dragId, dropId){
+    if(replaying){ toast('Replaying — please wait.'); return; }
+    const di = layers.findIndex(l=>l.id===dragId);
+    const ti = layers.findIndex(l=>l.id===dropId);
+    if(di < 0 || ti < 0) return;
+    const drag = layers[di], target = layers[ti];
+    // Full snapshot BEFORE mutating — enough to restore on undo.
+    const marker = {
+      type: 'mergeLayers', id: ++actionCounter,
+      dragId, dropId,
+      dragName: drag.name, targetName: target.name,
+      prevOrder: actions.slice(),
+      saved: actions.map(a=>({ a, layer: a.layer, src: a.src ? a.src.slice() : null })),
+      dragLayer: drag, dragIdx: di,
+      prevActiveId: activeLayerId
+    };
+
+    if(!mergeLayersCore(dragId, dropId)) return;
+    actions.push(marker);
+    redoStack.length = 0;
+    clearStrokeSelection();
+    renderAll();
+    renderLayersPanel();
+    toast(`${drag.name} → ${target.name} merged (Ctrl+Z to undo).`);
+  }
+
+  function undoMerge(marker){
+    // Put the dragged layer back into the stack…
+    layers.splice(Math.min(marker.dragIdx, layers.length), 0, marker.dragLayer);
+    // …restore every action's layer/src ownership…
+    marker.saved.forEach(s=>{
+      s.a.layer = s.layer;
+      if(s.src) s.a.src = s.src.slice(); else delete s.a.src;
+    });
+    // …and the original chronological order (marker was already popped).
+    actions.length = 0;
+    actions.push(...marker.prevOrder);
+    activeLayerId = marker.prevActiveId;
+  }
+
+  $('layerAddBtn').addEventListener('click', ()=>{
+    const l = createLayer();
+    // Insert above the currently active layer
+    const idx = layers.findIndex(x=>x.id===activeLayerId);
+    layers.splice(idx+1, 0, l);
+    activeLayerId = l.id;
+    renderLayersPanel();
+    compositeLayers();
+    toast(l.name + ' added.');
+  });
+
+  $('layerDelBtn').addEventListener('click', ()=>{
+    if(layers.length <= 1){ toast('At least one layer is required.'); return; }
+    const al = activeLayer();
+    const n = actions.filter(a=>a.layer===al.id).length;
+    if(!confirm(`Delete ${al.name}${n ? ` and its ${n} action(s)` : ''}?`)) return;
+    for(let i=actions.length-1; i>=0; i--){ if(actions[i].layer===al.id) actions.splice(i,1); }
+    // Merge markers snapshot the whole history — after a layer delete those
+    // snapshots are no longer valid, so drop them (their merge stays applied).
+    for(let i=actions.length-1; i>=0; i--){ if(actions[i].type==='mergeLayers') actions.splice(i,1); }
+    redoStack.length = 0;
+    const idx = layers.findIndex(x=>x.id===al.id);
+    layers.splice(idx, 1);
+    activeLayerId = layers[Math.max(0, idx-1)].id;
+    clearStrokeSelection();
+    renderAll();
+    renderLayersPanel();
+    toast('Layer deleted.');
+  });
+
+  function moveActiveLayer(dir){
+    const idx = layers.findIndex(x=>x.id===activeLayerId);
+    const target = idx + dir;
+    if(target < 0 || target >= layers.length){
+      toast(dir > 0 ? 'Already the top layer.' : 'Already the bottom layer.');
+      return;
+    }
+    const [l] = layers.splice(idx, 1);
+    layers.splice(target, 0, l);
+    compositeLayers();
+    renderLayersPanel();
+  }
+  $('layerUpBtn').addEventListener('click', ()=> moveActiveLayer(1));
+  $('layerDownBtn').addEventListener('click', ()=> moveActiveLayer(-1));
+
+  $('layerRecolorBtn').addEventListener('click', ()=>{
+    if(replaying){ toast('Replaying — please wait.'); return; }
+    const al = activeLayer();
+    if(!actions.some(a=>a.layer===al.id)){ toast('This layer is empty.'); return; }
+    applyLayerRecolor(al.ctx, fillColor);
+    compositeLayers();
+    actions.push({ type:'layerRecolor', id:++actionCounter, color: fillColor, layer: al.id });
+    redoStack.length = 0;
+    renderLayersPanel();
+    toast(`${al.name} recolored → ${fillColor.toUpperCase()}`);
+  });
+
+  // (Layer panel initial render + renderAll badge hook are installed at the
+  //  END of the script — `layers`/`actions` are declared later in this file,
+  //  so running them here would hit a temporal-dead-zone ReferenceError.)
+
   // ==================== DRAWING REPLAY ====================
   // Replays the drawing process (strokes point-by-point, fills as beats) on
   // the 01 canvas. The trace/reference layer is hidden during replay — only
@@ -957,10 +1270,13 @@
     if(replayBtnEl) replayBtnEl.disabled = true;
     if(replaySaveBtnEl) replaySaveBtnEl.disabled = true;
 
-    // "completed" layer: finished actions accumulate here
-    const done = document.createElement('canvas');
-    done.width = drawCanvas.width; done.height = drawCanvas.height;
-    const dnx = done.getContext('2d', { willReadFrequently: true });
+    // "completed" canvases: one per layer, so replayed erasers/fills respect
+    // layer boundaries exactly like the live drawing did.
+    const mkc = ()=>{ const c=document.createElement('canvas'); c.width=drawCanvas.width; c.height=drawCanvas.height; return c; };
+    const doneL = new Map();
+    layers.forEach(l => doneL.set(l.id, mkc()));
+    const doneCtx = id => (doneL.get(id) || doneL.get(layers[0].id)).getContext('2d', { willReadFrequently: true });
+    const rTemp = mkc();
 
     let recorder = null;
     const chunks = [];
@@ -986,37 +1302,76 @@
     const ptsPerFrame = Math.max(0.2, (totalPts / 360) * speed); // 1x ≈ 6s @60fps
     const beat = n => Math.max(1, Math.round(n / speed));
 
-    const blit = ()=>{
+    // blit composites all layer "done" canvases; optionally overlays a partial
+    // stroke on ITS layer (via a temp copy, so partial erasers stay in-layer).
+    const blit = (partialLayerId, drawPartial)=>{
       dctx.save();
       dctx.globalCompositeOperation = 'source-over';
       dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-      dctx.drawImage(done, 0, 0);
+      for(const l of layers){
+        if(!l.visible) continue;
+        const dc = doneL.get(l.id);
+        if(drawPartial && l.id === partialLayerId){
+          const t = rTemp.getContext('2d');
+          t.clearRect(0, 0, rTemp.width, rTemp.height);
+          t.drawImage(dc, 0, 0);
+          drawPartial(t);
+          dctx.drawImage(rTemp, 0, 0);
+        } else {
+          dctx.drawImage(dc, 0, 0);
+        }
+      }
       dctx.restore();
+      updateNavPreview();
     };
 
     toast(record ? 'Replaying & recording…' : 'Replaying…');
     blit(); await raf(); await raf();
 
     for(const a of actions){
+      const lid = doneL.has(a.layer) ? a.layer : layers[0].id;
       if(a.type === 'stroke'){
         const pts = a.points;
         const isEraser = a.tool === 'eraser';
         let prog = 1;
         while(prog < pts.length){
-          blit();
-          strokeSmoothPath(dctx, pts.slice(0, Math.max(1, Math.ceil(prog))), a.width, a.color, isEraser);
+          const n = Math.max(1, Math.ceil(prog));
+          blit(lid, t => strokeSmoothPath(t, pts.slice(0, n), a.width, a.color, isEraser));
           await raf();
           prog += ptsPerFrame;
         }
-        strokeSmoothPath(dnx, pts, a.width, a.color, isEraser); // commit
+        strokeSmoothPath(doneCtx(lid), pts, a.width, a.color, isEraser); // commit
         blit();
         await raf();
       } else if(a.type === 'fill'){
-        floodFillApply(dnx, a.x, a.y, a.color, a.tolerance);
+        if(a.m){
+          // Frozen mask → repaint the exact recorded region.
+          const dc = doneCtx(lid);
+          paintSplitFill(dc, decodeMask(a.m, dc.canvas.width * dc.canvas.height), a.color, a.ox, a.oy);
+        } else if(a.src){
+          // Rebuild the source composite from the DONE canvases of the
+          // recorded source layers (state at this point in the replay).
+          // The fill's own layer stays included — post-merge it may hold
+          // the boundary strokes.
+          const sc = mkc();
+          const scx = sc.getContext('2d', { willReadFrequently: true });
+          for(const l of layers){
+            if(a.src.includes(l.id) && doneL.has(l.id)){
+              scx.drawImage(doneL.get(l.id), 0, 0);
+            }
+          }
+          splitFillApply(doneCtx(lid), scx, a.x, a.y, a.color, a.tolerance);
+        } else {
+          floodFillApply(doneCtx(lid), a.x, a.y, a.color, a.tolerance);
+        }
         blit();
         for(let f=0, m=beat(12); f<m; f++) await raf(); // visual beat
+      } else if(a.type === 'layerRecolor'){
+        applyLayerRecolor(doneCtx(lid), a.color);
+        blit();
+        for(let f=0, m=beat(10); f<m; f++) await raf();
       } else if(a.type === 'image' && a.img){
-        dnx.drawImage(a.img, a.x, a.y, a.w, a.h);
+        doneCtx(lid).drawImage(a.img, a.x, a.y, a.w, a.h);
         blit();
         for(let f=0, m=beat(8); f<m; f++) await raf();
       }
@@ -1050,7 +1405,7 @@
     sel.addEventListener('change', ()=> localStorage.setItem(KEY, sel.value));
   })();
 
-  // ==================== HOTKEYS (단축키 영문화/추가) ====================
+  // ==================== HOTKEYS ====================
   window.addEventListener('keydown', e => {
     if(e.target.tagName === 'INPUT') return;
     if(replaying) return; // no undo/tool changes mid-replay
@@ -1064,7 +1419,10 @@
       const k = e.key.toLowerCase();
       if(k === 'b') { document.querySelector('[data-tool="brush"]').click(); }
       if(k === 'g') { document.querySelector('[data-tool="fill"]').click(); }
+      if(k === 'v') { document.querySelector('[data-tool="select"]').click(); }
       if(k === 'e') { document.querySelector('[data-tool="eraser"]').click(); }
+      if(k === 'r' && !e.repeat){ rotateKeyHeld = true; updateCursorState(); }
+      if(e.key === ' '){ if(!e.repeat){ spaceKeyHeld = true; updateCursorState(); } e.preventDefault(); }
       if(k === 'i') { e.preventDefault(); activateEyedropper(); }
       // [ / ] : if a COMPOSITION element is selected → move layer down / up (one step)
       //         otherwise → brush size down / up
@@ -1099,6 +1457,7 @@
     eyedropperActive = true;
     drawCanvas.style.cursor = 'crosshair';
     $('canvasCursor').style.display = 'none';
+    const b = $('eyedropperBtn'); if(b) b.classList.add('active');
     toast('Eyedropper: click canvas to pick a color.');
   }
   function pickColorAt(px, py){
@@ -1107,7 +1466,7 @@
     const d = dctx.getImageData(px, py, 1, 1).data;
     if(d[3] < 8){ toast('Picked empty pixel (no color).'); return; }
     const hex = rgbToHex(d[0], d[1], d[2]);
-    applyColorToActiveTarget(hex);
+    applyColor(hex);
     document.querySelectorAll('.palette-cell.selected').forEach(c=>c.classList.remove('selected'));
     toast(`Picked ${hex.toUpperCase()}`);
   }
@@ -1214,6 +1573,8 @@
 
   $('btnAdjustTrace').addEventListener('click', ()=>{
     if(!traceState.loaded){ toast('Load a reference image first.'); return; }
+    // Reference drag/resize math assumes an untransformed view.
+    if(!traceAdjustMode && (viewZoom !== 1 || viewRot !== 0 || viewPanX || viewPanY)) resetView();
     setTraceAdjustMode(!traceAdjustMode);
     if(traceAdjustMode) setTraceSelected(true);
   });
@@ -1295,12 +1656,20 @@
   function recipeToJson(recipe){
     // Compact: round coordinates to 0.1px
     const slim = recipe.map(a=>{
+      const li = a.li || 0;
       if(a.type==='stroke'){
-        return { type:'stroke', tool:a.tool, color:a.color, width:a.width,
+        return { type:'stroke', tool:a.tool, color:a.color, width:a.width, li,
                  points:a.points.map(p=>({x:Math.round(p.x*10)/10, y:Math.round(p.y*10)/10})) };
       }
       if(a.type==='fill'){
-        return { type:'fill', x:Math.round(a.x*10)/10, y:Math.round(a.y*10)/10, color:a.color, tolerance:a.tolerance||0 };
+        const o = { type:'fill', x:Math.round(a.x*10)/10, y:Math.round(a.y*10)/10, color:a.color, tolerance:a.tolerance||0, li };
+        if(a.src){ o.sli = a.src.map(id => layers.findIndex(l=>l.id===id)).filter(i=>i>=0); }
+        if(a.m){ o.m = a.m; }
+        if(a.ox || a.oy){ o.ox = Math.round(a.ox||0); o.oy = Math.round(a.oy||0); }
+        return o;
+      }
+      if(a.type==='layerRecolor'){
+        return { type:'layerRecolor', color:a.color, li };
       }
       return null;
     }).filter(Boolean);
@@ -1420,7 +1789,7 @@
     link.remove();
   }
 
-  // ==================== GITHUB CONFIG & COMMIT ====================
+  // ==================== GITHUB SELECTIVE LOAD ====================
   const GH_STORAGE_KEY = 'objet_studio_gh_config';
   let ghConfig = null;
 
@@ -1580,7 +1949,8 @@
         if(recipe && bbox && (bbox.minX || bbox.minY)){
           recipe = recipe.map(a=>{
             if(a.type==='stroke') return { ...a, points:a.points.map(p=>({x:p.x-bbox.minX, y:p.y-bbox.minY})) };
-            if(a.type==='fill')   return { ...a, x:a.x-bbox.minX, y:a.y-bbox.minY };
+            if(a.type==='fill')   return { ...a, x:a.x-bbox.minX, y:a.y-bbox.minY,
+                                           ...(a.m ? { ox:(a.ox||0)-bbox.minX, oy:(a.oy||0)-bbox.minY } : {}) };
             return a;
           });
         }
@@ -1618,7 +1988,7 @@
     }
   });
 
-  // ==================== GITHUB 선택적 불러오기 ====================
+  // ==================== GITHUB SELECTIVE LOAD ====================
   let ghPendingFiles = [];
 
   $('loadFolderBtn').addEventListener('click', async ()=>{
@@ -1684,7 +2054,7 @@
     ghPendingFiles.forEach((f, idx) => {
       const el = document.createElement('div');
       el.className = 'gh-item';
-      // Default unchecked (선택 해제된 상태)
+      // Default unchecked
       el.dataset.idx = idx;
 
       const img = document.createElement('img');
@@ -1746,7 +2116,7 @@
     toast(`${ok} objects loaded from online.`);
   });
 
-  // ---- 드래그 & 드롭 ----
+  // ---- Drag & drop ----
   (function setupDragDrop(){
     const zone = $('samplesPanel');
     let depth = 0;
@@ -1815,7 +2185,7 @@
 
   updateFolderChip();
 
-  // ==================== GITHUB MODAL EVENTS ====================
+  // ==================== GITHUB SELECTIVE LOAD ====================
   loadGhConfig();
 
   function openGhModal(){
@@ -2225,38 +2595,98 @@
 
   const drawCanvas = $('drawCanvas');
   const dctx = drawCanvas.getContext('2d', {willReadFrequently:true});
-  // Disable smoothing for pixel-perfect bucket fill support
-  dctx.imageSmoothingEnabled = false;
+
+  // ==================== LAYERS ====================
+  // The visible drawCanvas is a COMPOSITE. Each layer owns an offscreen
+  // canvas; actions carry the id of the layer they belong to. Erasers only
+  // erase within their own layer. Fills detect their region on the visible
+  // composite and are auto-split onto their OWN new layer (see SPLIT FILL).
+  let layerIdCounter = 0;
+  let layers = [];
+  let activeLayerId = null;
+
+  function createLayer(name){
+    const c = document.createElement('canvas');
+    c.width = drawCanvas.width; c.height = drawCanvas.height;
+    return {
+      id: ++layerIdCounter,
+      name: name || ('LAYER ' + layerIdCounter),
+      visible: true,
+      canvas: c,
+      ctx: c.getContext('2d', { willReadFrequently: true })
+    };
+  }
+  function activeLayer(){
+    return layers.find(l => l.id === activeLayerId) || layers[0];
+  }
+  function layerById(id){
+    return layers.find(l => l.id === id) || layers[0];
+  }
+  function compositeLayers(){
+    dctx.save();
+    dctx.globalCompositeOperation = 'source-over';
+    dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    for(const l of layers){
+      if(l.visible) dctx.drawImage(l.canvas, 0, 0);
+    }
+    dctx.restore();
+    if(typeof updateNavPreview === 'function') updateNavPreview();
+  }
+  layers.push(createLayer());
+  activeLayerId = layers[0].id;
+
+  // ---- Recolor engines (deterministic → replayable & PNG-persistable) ----
+  // Whole-layer recolor: every non-transparent pixel gets the new RGB,
+  // alpha preserved.
+  function applyLayerRecolor(ctx, hexColor){
+    const w = ctx.canvas.width, h = ctx.canvas.height;
+    const imgData = ctx.getImageData(0,0,w,h);
+    const data = imgData.data;
+    const [fr,fg,fb] = hexToRgb(hexColor);
+    for(let i=0; i<data.length; i+=4){
+      if(data[i+3] > 0){ data[i]=fr; data[i+1]=fg; data[i+2]=fb; }
+    }
+    ctx.putImageData(imgData,0,0);
+  }
 
   let actionCounter = 0;
   let selectedStrokeId = null;
 
   let currentTool = 'brush';       
+  // Unified color: one palette color drives both STROKE and FILL.
+  // (both variables stay in sync for compatibility with existing code)
   let strokeColor = '#1d1d1f';
-  let fillColor = '#ff3b30';
-  let activeColorTarget = 'stroke'; 
+  let fillColor = '#1d1d1f';
   let brushSize = 8;
   let tolerance = 0; // Default 0 for crisp pixels
   let drawing = false;
   let currentAction = null;
 
   function updateCursorState(e) {
-    const rect = drawCanvas.getBoundingClientRect();
+    if (rotateKeyHeld || spaceKeyHeld || viewDrag) {
+      $('canvasCursor').style.display = 'none';
+      drawCanvas.style.cursor = viewDrag ? 'grabbing' : 'grab';
+      return;
+    }
     if (currentTool === 'brush' || currentTool === 'eraser') {
       drawCanvas.style.cursor = 'none';
       const cursorCircle = $('canvasCursor');
       cursorCircle.style.display = 'block';
-      const size = brushSize * (rect.width / 1080);
+      // Local (untransformed) pixels: the view's CSS scale handles zoom visually.
+      const W0 = $('canvasView').offsetWidth || 1;
+      const size = brushSize * (W0 / 1080);
       cursorCircle.style.width = size + 'px';
       cursorCircle.style.height = size + 'px';
       cursorCircle.style.borderRadius = '50%'; // Round cursor to match round AA brush
       if (e) {
-        cursorCircle.style.left = (e.clientX - rect.left) + 'px';
-        cursorCircle.style.top = (e.clientY - rect.top) + 'px';
+        const p = getPos(e);
+        cursorCircle.style.left = p._lx + 'px';
+        cursorCircle.style.top = p._ly + 'px';
       }
     } else {
       $('canvasCursor').style.display = 'none';
-      drawCanvas.style.cursor = currentTool === 'fill' ? 'copy' : (currentTool === 'select' ? 'pointer' : 'crosshair');
+      drawCanvas.style.cursor = currentTool === 'fill' ? 'copy'
+                              : currentTool === 'select' ? 'move' : 'crosshair';
     }
   }
 
@@ -2270,40 +2700,136 @@
   }
 
   function updateColorPreviews(){
-    $('strokeSwatchPreview').style.background = strokeColor;
-    $('fillSwatchPreview').style.background = fillColor;
     updateBrushPreview();
   }
 
-  function updatePaletteLabel(){
-    if(selectedStrokeId != null){ $('paletteTargetLabel').textContent = 'EDITING SELECTED STROKE'; }
-    else if(currentTool === 'select'){ $('paletteTargetLabel').textContent = 'SELECT STROKE ON CANVAS'; }
-    else if(activeColorTarget === 'fill'){ $('paletteTargetLabel').textContent = 'EDITING FILL COLOR'; }
-    else { $('paletteTargetLabel').textContent = 'EDITING STROKE COLOR'; }
-  }
+  // ==================== VIEW NAVIGATION (zoom / rotate / pan) ====================
+  // A non-destructive CSS transform on #canvasView. The artwork pixels are
+  // untouched — only how the canvas is DISPLAYED changes, like Photoshop's
+  // navigator + Rotate View tool. getPos() inverts the transform so every
+  // tool keeps drawing exactly under the pointer at any zoom/angle.
+  let viewZoom = 1, viewRot = 0, viewPanX = 0, viewPanY = 0;
+  let rotateKeyHeld = false, spaceKeyHeld = false;
+  let viewDrag = null;
 
-  function setActiveColorTarget(target){
-    activeColorTarget = target;
-    $('strokeTarget').classList.toggle('active', target==='stroke');
-    $('fillTarget').classList.toggle('active', target==='fill');
-    if(target==='stroke') $('customColorPicker').value = strokeColor;
-    else if(target==='fill') $('customColorPicker').value = fillColor;
-    else if(target==='selectedStroke' && selectedStrokeId!=null){
-      const a = actions.find(x=>x.id===selectedStrokeId);
-      if(a) $('customColorPicker').value = a.color;
-    }
-    updatePaletteLabel();
+  function applyViewTransform(){
+    $('canvasView').style.transform =
+      `translate(${viewPanX}px, ${viewPanY}px) rotate(${viewRot}rad) scale(${viewZoom})`;
+    let deg = Math.round(viewRot * 180 / Math.PI) % 360;
+    if(deg > 180) deg -= 360; if(deg < -180) deg += 360;
+    $('navInfo').textContent = `${Math.round(viewZoom*100)}% · ${deg}°`;
+    $('zoomSlider').value = Math.max(20, Math.min(400, Math.round(viewZoom*100)));
+    updateNavPreview();
+  }
+  function setViewZoom(z){
+    viewZoom = Math.max(0.2, Math.min(4, z));
+    applyViewTransform();
+  }
+  function resetView(){
+    viewZoom = 1; viewRot = 0; viewPanX = 0; viewPanY = 0;
+    applyViewTransform();
   }
 
   function getPos(e){
-    const rect = drawCanvas.getBoundingClientRect();
-    const scaleX = drawCanvas.width / rect.width;
-    const scaleY = drawCanvas.height / rect.height;
-    return { x:(e.clientX-rect.left)*scaleX, y:(e.clientY-rect.top)*scaleY };
+    const view = $('canvasView');
+    // The transformed bbox's CENTER is exact (translate moves it, rotate and
+    // scale about the center keep it) — walk backwards from there.
+    const r = view.getBoundingClientRect();
+    const cx = r.left + r.width/2, cy = r.top + r.height/2;
+    const vx = e.clientX - cx, vy = e.clientY - cy;
+    const cos = Math.cos(-viewRot), sin = Math.sin(-viewRot);
+    const ux = vx*cos - vy*sin;
+    const uy = vx*sin + vy*cos;
+    const W0 = view.offsetWidth || 1, H0 = view.offsetHeight || 1; // untransformed layout size
+    const lx = ux/viewZoom + W0/2, ly = uy/viewZoom + H0/2;        // local CSS coords
+    return { x: lx * (drawCanvas.width / W0), y: ly * (drawCanvas.height / H0), _lx: lx, _ly: ly };
   }
 
+  // ---- Navigator preview (mini-map) ----
+  // Live thumbnail of the composite; a red outline marks the part of the
+  // canvas currently visible in the frame (inverse-mapped frame corners, so
+  // it stays correct under any zoom / rotation / pan).
+  function updateNavPreview(){
+    const c = $('navPreview'); if(!c) return;
+    const nx = c.getContext('2d');
+    nx.clearRect(0, 0, c.width, c.height);
+    nx.drawImage(drawCanvas, 0, 0, c.width, c.height);
+    if(viewZoom !== 1 || viewRot !== 0 || viewPanX || viewPanY){
+      const frame = drawCanvas.closest('.canvas-frame');
+      const fr = frame.getBoundingClientRect();
+      if(fr.width && fr.height){
+        const sx = c.width / drawCanvas.width, sy = c.height / drawCanvas.height;
+        const corners = [[fr.left,fr.top],[fr.right,fr.top],[fr.right,fr.bottom],[fr.left,fr.bottom]];
+        nx.save();
+        nx.strokeStyle = '#ff3b30';
+        nx.lineWidth = 2;
+        nx.beginPath();
+        corners.forEach(([X,Y], i)=>{
+          const p = getPos({ clientX: X, clientY: Y });
+          if(i) nx.lineTo(p.x*sx, p.y*sy); else nx.moveTo(p.x*sx, p.y*sy);
+        });
+        nx.closePath();
+        nx.stroke();
+        nx.restore();
+      }
+    }
+  }
+
+  // Pan so the given canvas point lands at the center of the frame.
+  function panToCanvasPoint(cx, cy){
+    const view = $('canvasView');
+    const W0 = view.offsetWidth || 1, H0 = view.offsetHeight || 1;
+    const lx = (cx / drawCanvas.width) * W0 - W0/2;
+    const ly = (cy / drawCanvas.height) * H0 - H0/2;
+    const sx = lx * viewZoom, sy = ly * viewZoom;
+    viewPanX = -(sx*Math.cos(viewRot) - sy*Math.sin(viewRot));
+    viewPanY = -(sx*Math.sin(viewRot) + sy*Math.cos(viewRot));
+    applyViewTransform();
+  }
+
+  (function initNavPreview(){
+    const c = $('navPreview');
+    let dragging = false;
+    const toCanvas = ev => {
+      const r = c.getBoundingClientRect();
+      return { x: (ev.clientX - r.left) / r.width * drawCanvas.width,
+               y: (ev.clientY - r.top) / r.height * drawCanvas.height };
+    };
+    c.addEventListener('pointerdown', ev=>{
+      dragging = true;
+      try { c.setPointerCapture(ev.pointerId); } catch(e){}
+      const p = toCanvas(ev); panToCanvasPoint(p.x, p.y);
+    });
+    c.addEventListener('pointermove', ev=>{
+      if(!dragging) return;
+      const p = toCanvas(ev); panToCanvasPoint(p.x, p.y);
+    });
+    const end = ()=>{ dragging = false; };
+    c.addEventListener('pointerup', end);
+    c.addEventListener('pointercancel', end);
+  })();
+
+  $('zoomSlider').addEventListener('input', e=> setViewZoom(parseInt(e.target.value, 10) / 100));
+  $('zoomInBtn').addEventListener('click', ()=> setViewZoom(viewZoom * 1.25));
+  $('zoomOutBtn').addEventListener('click', ()=> setViewZoom(viewZoom / 1.25));
+  $('rotLeftBtn').addEventListener('click', ()=>{ viewRot -= Math.PI/12; applyViewTransform(); });
+  $('rotRightBtn').addEventListener('click', ()=>{ viewRot += Math.PI/12; applyViewTransform(); });
+  $('navResetBtn').addEventListener('click', resetView);
+  // Ctrl/Cmd + wheel over the canvas = zoom
+  drawCanvas.closest('.canvas-frame').addEventListener('wheel', e=>{
+    if(!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    setViewZoom(viewZoom * (e.deltaY < 0 ? 1.1 : 1/1.1));
+  }, { passive: false });
+  // Release rotate/pan modifiers
+  window.addEventListener('keyup', e=>{
+    if(e.key.toLowerCase() === 'r'){ rotateKeyHeld = false; updateCursorState(); }
+    if(e.key === ' '){ spaceKeyHeld = false; updateCursorState(); }
+  });
+  window.addEventListener('blur', ()=>{ rotateKeyHeld = false; spaceKeyHeld = false; });
+
   // ==================== PIXEL PERFECT (ALIASED) DRAWING ====================
-  // 브레즌햄 선 그리기 (계단 현상 그대로, 부드러운 효과 없음) -> 버킷 채우기 완벽 호환
+  // (Bresenham-style aliased line renderer was removed)
   // (Legacy per-segment line renderer removed — all strokes now render
   //  through strokeSmoothPath as a single anti-aliased path.)
 
@@ -2415,6 +2941,186 @@
     ctx.putImageData(imgData,0,0);
   }
 
+  // ==================== SPLIT FILL (fill → its own layer) ====================
+  // The flood REGION is detected on a SOURCE composite (what the user sees),
+  // but the paint lands on a separate DESTINATION layer. The mask uses the
+  // exact same scanline flood + AA-edge dilation as floodFillApply, so the
+  // fill still tucks under anti-aliased line edges — the lines simply live
+  // on layers above the fill layer.
+  let fillLayerCounter = 0;
+
+  // Composite the CURRENT pixels of the given layer ids (stack order) into a
+  // temp canvas. Used both live and during deterministic replays.
+  function compositeCanvasOf(ids){
+    const c = document.createElement('canvas');
+    c.width = drawCanvas.width; c.height = drawCanvas.height;
+    const cx = c.getContext('2d', { willReadFrequently: true });
+    for(const l of layers){
+      if(ids.includes(l.id)) cx.drawImage(l.canvas, 0, 0);
+    }
+    return c;
+  }
+
+  // Detect the flood region on srcCtx and paint it SOLID onto destCtx.
+  // Returns false when the clicked spot is already the fill color (no-op).
+  // Detect the flood region on srcCtx. Returns the mask (Uint8Array,
+  // 1 = core / 2 = AA-edge dilation ring) or false when the clicked spot is
+  // already the fill color (no-op).
+  function computeSplitFillMask(srcCtx, seedX, seedY, hexColor, tol){
+    const w = srcCtx.canvas.width, h = srcCtx.canvas.height;
+    seedX = Math.max(0, Math.min(w-1, Math.floor(seedX)));
+    seedY = Math.max(0, Math.min(h-1, Math.floor(seedY)));
+    const data = srcCtx.getImageData(0,0,w,h).data;
+    const idx = (x,y) => (y*w+x)*4;
+    const si = idx(seedX,seedY);
+    const sr=data[si], sg=data[si+1], sb=data[si+2], sa=data[si+3];
+    const [fr,fg,fb] = hexToRgb(hexColor);
+    if(Math.abs(sr-fr)<3 && Math.abs(sg-fg)<3 && Math.abs(sb-fb)<3 && sa>250) return false;
+
+    const tol2 = tol*tol*4 + 1;
+    const seedIsEmpty = sa <= 24;
+    function matches(i){
+      if(seedIsEmpty && data[i+3] <= 24) return true;
+      const dr=data[i]-sr, dg=data[i+1]-sg, db=data[i+2]-sb, da=data[i+3]-sa;
+      return (dr*dr+dg*dg+db*db+da*da) <= tol2;
+    }
+
+    // Stage 1: scanline flood mask (identical to floodFillApply)
+    const mask = new Uint8Array(w*h);
+    const stack = [[seedX,seedY]];
+    while(stack.length){
+      const [x,y] = stack.pop();
+      if(x<0||x>=w||y<0||y>=h) continue;
+      const vi = y*w+x;
+      if(mask[vi]) continue;
+      if(!matches(idx(x,y))) continue;
+      let xl = x;
+      while(xl>0 && !mask[y*w+xl-1] && matches(idx(xl-1,y))) xl--;
+      let xr = x;
+      while(xr<w-1 && !mask[y*w+xr+1] && matches(idx(xr+1,y))) xr++;
+      for(let xx=xl; xx<=xr; xx++){
+        mask[y*w+xx]=1;
+        if(y>0 && !mask[(y-1)*w+xx] && matches(idx(xx,y-1))) stack.push([xx,y-1]);
+        if(y<h-1 && !mask[(y+1)*w+xx] && matches(idx(xx,y+1))) stack.push([xx,y+1]);
+      }
+    }
+
+    // Stage 2: dilate so the fill reaches under AA stroke edges
+    let frontier = [];
+    for(let y=0; y<h; y++){
+      for(let x=0; x<w; x++){
+        if(mask[y*w+x]===1){
+          if((x>0 && !mask[y*w+x-1]) || (x<w-1 && !mask[y*w+x+1]) ||
+             (y>0 && !mask[(y-1)*w+x]) || (y<h-1 && !mask[(y+1)*w+x])){
+            frontier.push(y*w+x);
+          }
+        }
+      }
+    }
+    for(let step=0; step<FILL_EXPAND; step++){
+      const next = [];
+      for(const vi of frontier){
+        const x = vi % w, y = (vi - x) / w;
+        const nbs = [];
+        if(x>0) nbs.push(vi-1);
+        if(x<w-1) nbs.push(vi+1);
+        if(y>0) nbs.push(vi-w);
+        if(y<h-1) nbs.push(vi+w);
+        for(const ni of nbs){
+          if(!mask[ni]){ mask[ni]=2; next.push(ni); }
+        }
+      }
+      frontier = next;
+      if(!frontier.length) break;
+    }
+    return mask;
+  }
+
+  // Paint a region mask onto the destination layer, optionally offset by
+  // (ox, oy) — used by the SELECT tool when a fill layer has been moved.
+  // The fill goes UNDERNEATH whatever already exists on the destination
+  // (out = dest OVER fillColor — same rule as the classic floodFillApply).
+  // On a fresh fill layer every pixel is empty, so this degenerates to a
+  // solid patch; after a merge, strokes sharing the layer keep their
+  // anti-aliased edges and the fill tucks under them.
+  function paintSplitFill(destCtx, mask, hexColor, ox, oy){
+    const w = destCtx.canvas.width, h = destCtx.canvas.height;
+    ox = Math.round(ox || 0); oy = Math.round(oy || 0);
+    const [fr,fg,fb] = hexToRgb(hexColor);
+    const out = destCtx.getImageData(0,0,w,h);
+    const od = out.data;
+    for(let vi=0; vi<w*h; vi++){
+      const m = mask[vi];
+      if(!m) continue;
+      const x = (vi % w) + ox, y = ((vi - (vi % w)) / w) + oy;
+      if(x<0 || x>=w || y<0 || y>=h) continue;
+      const i = (y*w + x)*4;
+      const da = od[i+3];
+      if(m===1 && da>=250){
+        // Core, fully opaque on dest (e.g. refilling a merged fill) → replace.
+        od[i]=fr; od[i+1]=fg; od[i+2]=fb; od[i+3]=255;
+      } else {
+        const sa2 = da / 255;
+        od[i]   = Math.round(od[i]  *sa2 + fr*(1-sa2));
+        od[i+1] = Math.round(od[i+1]*sa2 + fg*(1-sa2));
+        od[i+2] = Math.round(od[i+2]*sa2 + fb*(1-sa2));
+        od[i+3] = 255;
+      }
+    }
+    destCtx.putImageData(out,0,0);
+  }
+
+  // ---- Mask persistence (run-length encoding) ----
+  // The mask is FROZEN into the fill action at creation time, so undo/redo,
+  // layer merges, layer moves, and recipe reloads all repaint the *exact*
+  // region that was filled — the region is never re-derived from sources
+  // that may have changed, which is what used to flood the background.
+  function encodeMask(mask){
+    const rle = [];
+    let i = 0;
+    const n = mask.length;
+    while(i < n){
+      const v = mask[i];
+      if(v === 0){ i++; continue; }
+      let j = i + 1;
+      while(j < n && mask[j] === v) j++;
+      rle.push(i, j - i, v);
+      i = j;
+    }
+    return rle;
+  }
+  function decodeMask(rle, size){
+    const mask = new Uint8Array(size);
+    for(let k=0; k<rle.length; k+=3){
+      const start = rle[k], len = rle[k+1], v = rle[k+2];
+      mask.fill(v, start, Math.min(start + len, size));
+    }
+    return mask;
+  }
+
+  // Convenience for legacy actions (recorded before mask persistence):
+  // recompute from the recorded source layers, then paint.
+  function splitFillApply(destCtx, srcCtx, seedX, seedY, hexColor, tol, ox, oy){
+    const mask = computeSplitFillMask(srcCtx, seedX, seedY, hexColor, tol);
+    if(!mask) return false;
+    paintSplitFill(destCtx, mask, hexColor, ox, oy);
+    return true;
+  }
+
+  // Replay a split-fill ACTION onto its own layer. Prefers the frozen mask;
+  // falls back to recomputing from the recorded source layers (the fill's
+  // own layer stays included — post-merge it may hold the boundary strokes).
+  function replaySplitFill(a){
+    const dest = layerById(a.layer);
+    if(a.m){
+      const mask = decodeMask(a.m, dest.canvas.width * dest.canvas.height);
+      paintSplitFill(dest.ctx, mask, a.color, a.ox, a.oy);
+      return;
+    }
+    const src = compositeCanvasOf(a.src || []);
+    splitFillApply(dest.ctx, src.getContext('2d'), a.x, a.y, a.color, a.tolerance, a.ox, a.oy);
+  }
+
   // Render an entire stroke as ONE smooth path (quadratic curves through
   // midpoints) with a single stroke() call. This is the key to non-grainy
   // lines: drawing segment-by-segment stacks each segment's semi-transparent
@@ -2496,22 +3202,25 @@
   }
 
   function renderAll(){
-    dctx.globalCompositeOperation = 'source-over';
-    dctx.clearRect(0,0,drawCanvas.width, drawCanvas.height);
+    // Rebuild every layer from its actions (chronological), then composite.
+    layers.forEach(l => l.ctx.clearRect(0, 0, l.canvas.width, l.canvas.height));
     actions.forEach(a=>{
       try {
-        if(a.type==='stroke') renderStrokeFull(dctx, a);
-        else if(a.type==='fill') floodFillApply(dctx, a.x, a.y, a.color, a.tolerance);
+        const lc = layerById(a.layer).ctx;
+        if(a.type==='stroke') renderStrokeFull(lc, a);
+        else if(a.type==='fill'){
+          if(a.src) replaySplitFill(a);                             // frozen mask / source composite
+          else floodFillApply(lc, a.x, a.y, a.color, a.tolerance);  // legacy action compat
+        }
+        else if(a.type==='layerRecolor') applyLayerRecolor(lc, a.color);
         else if(a.type==='image' && a.img && a.w > 0 && a.h > 0){
-          dctx.globalCompositeOperation = 'source-over';
-          dctx.imageSmoothingEnabled = false;
-          dctx.drawImage(a.img, a.x, a.y, a.w, a.h);
+          lc.drawImage(a.img, a.x, a.y, a.w, a.h);
         }
       } catch(err){
         console.error('renderAll: skipped an action due to error', err, a);
       }
     });
-    dctx.globalCompositeOperation = 'source-over';
+    compositeLayers();
     if(selectedStrokeId != null){
       const sel = actions.find(a=>a.id===selectedStrokeId);
       if(sel) drawSelectionHighlight(sel);
@@ -2543,19 +3252,8 @@
     return null;
   }
 
-  function selectStroke(a){
-    selectedStrokeId = a.id;
-    $('strokeEditor').hidden = false;
-    $('selStrokeColorPreview').style.background = a.color;
-    $('selStrokeWidth').value = a.width;
-    $('selStrokeWidthVal').textContent = a.width;
-    setActiveColorTarget('selectedStroke');
-    renderAll();
-  }
   function clearStrokeSelection(){
     selectedStrokeId = null;
-    $('strokeEditor').hidden = true;
-    setActiveColorTarget(currentTool==='fill' ? 'fill' : 'stroke');
     renderAll();
   }
 
@@ -2576,9 +3274,27 @@
 
     const p = getPos(e);
 
+    if(rotateKeyHeld || spaceKeyHeld){
+      const view = $('canvasView');
+      const r = view.getBoundingClientRect();
+      const cx = r.left + r.width/2, cy = r.top + r.height/2;
+      viewDrag = {
+        mode: rotateKeyHeld ? 'rotate' : 'pan',
+        cx, cy,
+        startAngle: Math.atan2(e.clientY - cy, e.clientX - cx),
+        startRot: viewRot,
+        startPanX: viewPanX, startPanY: viewPanY,
+        startX: e.clientX, startY: e.clientY
+      };
+      try { drawCanvas.setPointerCapture(e.pointerId); } catch(err){}
+      updateCursorState();
+      return;
+    }
+
     if(eyedropperActive){
       pickColorAt(p.x, p.y);
       eyedropperActive = false;
+      const b = $('eyedropperBtn'); if(b) b.classList.remove('active');
       updateCursorState(e);
       return;
     }
@@ -2586,24 +3302,40 @@
     if(currentTool === 'fill'){
       drawCanvas.style.cursor = 'wait';
       setTimeout(()=>{
-        floodFillApply(dctx, p.x, p.y, fillColor, tolerance);
-        actions.push({ type:'fill', id:++actionCounter, x:p.x, y:p.y, color:fillColor, tolerance });
-        redoStack.length = 0; 
+        // Region is detected on the VISIBLE composite (WYSIWYG), but the
+        // paint goes onto a brand-new layer inserted BELOW the active layer
+        // — lineart stays on top, and each fill is separated automatically.
+        const srcIds = layers.filter(l=>l.visible).map(l=>l.id);
+        const src = compositeCanvasOf(srcIds);
+        const mask = computeSplitFillMask(src.getContext('2d'), p.x, p.y, fillColor, tolerance);
         drawCanvas.style.cursor = 'copy';
+        if(!mask){ toast('Already this color. Pick another color.'); return; }
+        const fl = createLayer('FILL ' + (++fillLayerCounter));
+        paintSplitFill(fl.ctx, mask, fillColor, 0, 0);
+        const idx = layers.findIndex(x=>x.id===activeLayerId);
+        layers.splice(Math.max(0, idx), 0, fl); // below the active layer
+        compositeLayers();
+        actions.push({ type:'fill', id:++actionCounter, x:p.x, y:p.y, color:fillColor, tolerance,
+                       layer: fl.id, src: srcIds, m: encodeMask(mask) });
+        renderLayersPanel();
+        redoStack.length = 0;
+        toast(`Fill split to new layer: ${fl.name}.`);
       }, 10);
       return;
     }
 
     if(currentTool === 'select'){
-      const hit = hitTestStroke(p);
-      if(hit) selectStroke(hit); else clearStrokeSelection();
+      // Drag anywhere on the canvas to move the ACTIVE layer's contents.
+      const al = activeLayer();
+      movingLayer = { layer: al, startX: p.x, startY: p.y, dx: 0, dy: 0 };
+      try { drawCanvas.setPointerCapture(e.pointerId); } catch(err){}
       return;
     }
 
     drawing = true;
     drawCanvas.setPointerCapture(e.pointerId);
     lastRawPos = p;
-    currentAction = { type:'stroke', id:++actionCounter, tool:currentTool, color:strokeColor, width:brushSize, points:[p] };
+    currentAction = { type:'stroke', id:++actionCounter, tool:currentTool, color:strokeColor, width:brushSize, points:[p], layer: activeLayer().id };
     takeStrokeSnapshot();
     repaintLiveStroke();
   });
@@ -2613,25 +3345,42 @@
   // move restores it and re-renders the WHOLE current stroke as one smooth
   // path. This prevents AA edges of individual segments from stacking up
   // (the cause of grainy-looking lines).
-  let strokeSnapshot = null;
+  // Per-layer live drawing: the stroke previews on a temp copy of the ACTIVE
+  // layer only, so an eraser stroke never appears to erase other layers.
+  let liveBelow = null, liveAbove = null, liveBase = null, liveTemp = null;
+  function mkLayerScratch(){
+    const c = document.createElement('canvas');
+    c.width = drawCanvas.width; c.height = drawCanvas.height;
+    return c;
+  }
   function takeStrokeSnapshot(){
-    if(!strokeSnapshot){
-      strokeSnapshot = document.createElement('canvas');
-      strokeSnapshot.width = drawCanvas.width;
-      strokeSnapshot.height = drawCanvas.height;
+    if(!liveBelow){ liveBelow = mkLayerScratch(); liveAbove = mkLayerScratch(); liveBase = mkLayerScratch(); liveTemp = mkLayerScratch(); }
+    const al = activeLayer();
+    const b = liveBelow.getContext('2d'), a = liveAbove.getContext('2d'), base = liveBase.getContext('2d');
+    b.clearRect(0,0,liveBelow.width,liveBelow.height);
+    a.clearRect(0,0,liveAbove.width,liveAbove.height);
+    base.clearRect(0,0,liveBase.width,liveBase.height);
+    let seenActive = false;
+    for(const l of layers){
+      if(l.id === al.id){ seenActive = true; base.drawImage(l.canvas, 0, 0); continue; }
+      if(!l.visible) continue;
+      (seenActive ? a : b).drawImage(l.canvas, 0, 0);
     }
-    const sctx = strokeSnapshot.getContext('2d');
-    sctx.clearRect(0, 0, strokeSnapshot.width, strokeSnapshot.height);
-    sctx.drawImage(drawCanvas, 0, 0);
   }
   function repaintLiveStroke(){
     if(!currentAction) return;
+    const t = liveTemp.getContext('2d');
+    t.clearRect(0,0,liveTemp.width,liveTemp.height);
+    t.drawImage(liveBase, 0, 0);
+    renderStrokeFull(t, currentAction);
     dctx.save();
     dctx.globalCompositeOperation = 'source-over';
     dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-    dctx.drawImage(strokeSnapshot, 0, 0);
+    dctx.drawImage(liveBelow, 0, 0);
+    dctx.drawImage(liveTemp, 0, 0);
+    dctx.drawImage(liveAbove, 0, 0);
     dctx.restore();
-    renderStrokeFull(dctx, currentAction);
+    updateNavPreview();
   }
 
   // ---- Lazy brush: the brush trails the pointer on a "string" of radius
@@ -2640,8 +3389,59 @@
   const LAZY_RADIUS = 6; // canvas px (1080-scale); ~2px on screen
   let lastRawPos = null;
 
+  // ---- SELECT tool: move the active layer's contents by dragging ----
+  let movingLayer = null;
+
+  function compositeLayersMoving(){
+    if(!movingLayer){ compositeLayers(); return; }
+    dctx.save();
+    dctx.globalCompositeOperation = 'source-over';
+    dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    for(const l of layers){
+      if(!l.visible) continue;
+      if(l.id === movingLayer.layer.id) dctx.drawImage(l.canvas, movingLayer.dx, movingLayer.dy);
+      else dctx.drawImage(l.canvas, 0, 0);
+    }
+    dctx.restore();
+    updateNavPreview();
+  }
+
+  // Shift an action's recorded coordinates by (dx, dy). Split fills carry a
+  // frozen mask, so they just accumulate a paint offset; legacy fills shift
+  // their seed (their own layer's content shifts with them, so the flood
+  // stays consistent).
+  function shiftActionBy(a, dx, dy){
+    if(a.type === 'stroke'){
+      a.points.forEach(pt => { pt.x += dx; pt.y += dy; });
+    } else if(a.type === 'fill'){
+      if(a.m){ a.ox = (a.ox||0) + dx; a.oy = (a.oy||0) + dy; }
+      else { a.x += dx; a.y += dy; }
+    } else if(a.type === 'image'){
+      a.x += dx; a.y += dy;
+    }
+    // layerRecolor & markers: no coordinates to shift
+  }
+
   drawCanvas.addEventListener('pointermove', e=>{
     updateCursorState(e);
+    if(viewDrag){
+      if(viewDrag.mode === 'rotate'){
+        const a = Math.atan2(e.clientY - viewDrag.cy, e.clientX - viewDrag.cx);
+        viewRot = viewDrag.startRot + (a - viewDrag.startAngle);
+      } else {
+        viewPanX = viewDrag.startPanX + (e.clientX - viewDrag.startX);
+        viewPanY = viewDrag.startPanY + (e.clientY - viewDrag.startY);
+      }
+      applyViewTransform();
+      return;
+    }
+    if(movingLayer){
+      const p = getPos(e);
+      movingLayer.dx = p.x - movingLayer.startX;
+      movingLayer.dy = p.y - movingLayer.startY;
+      compositeLayersMoving();
+      return;
+    }
     if(!drawing || !currentAction) return;
     const p = getPos(e);
     lastRawPos = p;
@@ -2659,6 +3459,23 @@
   drawCanvas.addEventListener('pointerleave', () => { $('canvasCursor').style.display = 'none'; });
 
   function endStroke(){
+    if(viewDrag){ viewDrag = null; updateCursorState(); return; }
+    if(movingLayer){
+      const mv = movingLayer; movingLayer = null;
+      const dx = Math.round(mv.dx), dy = Math.round(mv.dy);
+      if(dx !== 0 || dy !== 0){
+        const moved = actions.filter(a =>
+          a.layer === mv.layer.id && a.type !== 'moveLayer' && a.type !== 'mergeLayers');
+        moved.forEach(a => shiftActionBy(a, dx, dy));
+        actions.push({ type:'moveLayer', id:++actionCounter, layer: mv.layer.id, dx, dy, moved });
+        redoStack.length = 0;
+        renderAll();
+        toast(`${mv.layer.name} moved: ${dx>=0?'+':''}${dx}, ${dy>=0?'+':''}${dy}`);
+      } else {
+        compositeLayers();
+      }
+      return;
+    }
     if(drawing){
       drawing = false;
       if(currentAction && currentAction.points.length>0){
@@ -2670,7 +3487,11 @@
           pts.push({ x: lastRawPos.x, y: lastRawPos.y });
           repaintLiveStroke();
         }
+        // Commit the finished stroke into its layer, then recomposite.
+        renderStrokeFull(activeLayer().ctx, currentAction);
+        compositeLayers();
         actions.push(currentAction);
+        renderLayersPanel();
         redoStack.length = 0; 
       }
       currentAction = null;
@@ -2687,6 +3508,35 @@
     }
     const undoneAction = actions.pop();
     redoStack.push(undoneAction);
+    // Layer merge → restore both layers from the marker's snapshot.
+    if(undoneAction.type === 'mergeLayers'){
+      undoMerge(undoneAction);
+      clearStrokeSelection();
+      renderAll();
+      renderLayersPanel();
+      toast(`Merge undone: ${undoneAction.dragName} restored.`);
+      return;
+    }
+    // Layer move → shift the same actions back.
+    if(undoneAction.type === 'moveLayer'){
+      undoneAction.moved.forEach(a => shiftActionBy(a, -undoneAction.dx, -undoneAction.dy));
+      clearStrokeSelection();
+      renderAll();
+      toast('Layer move undone.');
+      return;
+    }
+    // A split fill auto-created its own layer — if nothing else lives on it,
+    // take the layer out too (stashed on the action so REDO can restore it).
+    if(undoneAction.type === 'fill' && undoneAction.src &&
+       !actions.some(a => a.layer === undoneAction.layer)){
+      const li = layers.findIndex(l => l.id === undoneAction.layer);
+      if(li >= 0 && layers.length > 1){
+        undoneAction._layerRestore = { layer: layers[li], idx: li };
+        layers.splice(li, 1);
+        if(activeLayerId === undoneAction.layer) activeLayerId = layers[Math.max(0, li-1)].id;
+        renderLayersPanel();
+      }
+    }
     clearStrokeSelection();
     renderAll();
     toast('Undo successful.');
@@ -2698,29 +3548,63 @@
       return;
     }
     const redoneAction = redoStack.pop();
+    if(redoneAction.type === 'moveLayer'){
+      redoneAction.moved.forEach(a => shiftActionBy(a, redoneAction.dx, redoneAction.dy));
+      actions.push(redoneAction);
+      clearStrokeSelection();
+      renderAll();
+      toast('Layer move redone.');
+      return;
+    }
+    if(redoneAction.type === 'mergeLayers'){
+      mergeLayersCore(redoneAction.dragId, redoneAction.dropId);
+      actions.push(redoneAction);
+      clearStrokeSelection();
+      renderAll();
+      renderLayersPanel();
+      toast(`Merge redone: ${redoneAction.dragName} → ${redoneAction.targetName}.`);
+      return;
+    }
+    if(redoneAction._layerRestore && !layers.some(l => l.id === redoneAction.layer)){
+      const { layer, idx } = redoneAction._layerRestore;
+      layers.splice(Math.min(idx, layers.length), 0, layer);
+      delete redoneAction._layerRestore;
+      renderLayersPanel();
+    }
     actions.push(redoneAction);
     clearStrokeSelection();
     renderAll();
     toast('Redo successful.');
   });
 
-  document.querySelectorAll('.tool-select .tool-btn:not(.tool-clear-btn)').forEach(btn=>{
+  document.querySelectorAll('.tool-select .tool-btn:not(.tool-clear-btn):not(#eyedropperBtn)').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      document.querySelectorAll('.tool-select .tool-btn:not(.tool-clear-btn)').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.tool-select .tool-btn:not(.tool-clear-btn):not(#eyedropperBtn)').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       currentTool = btn.dataset.tool;
-      $('toleranceRow').style.opacity = currentTool === 'fill' ? '1' : '0.4';
+      $('toleranceRow').style.opacity = (currentTool === 'fill') ? '1' : '0.4';
       updateBrushPreview();
-      if(currentTool !== 'select'){
-        clearStrokeSelection();
-      } else {
-        updatePaletteLabel();
-      }
+      clearStrokeSelection();
     });
   });
 
-  $('strokeTarget').addEventListener('click', ()=> setActiveColorTarget('stroke'));
-  $('fillTarget').addEventListener('click', ()=> setActiveColorTarget('fill'));
+  $('eyedropperBtn').addEventListener('click', ()=>{
+    if(replaying){ toast('Replaying — please wait.'); return; }
+    activateEyedropper();
+  });
+
+  // ---- Unified color: palette / custom picker / eyedropper set one color ----
+  function applyColor(hex){
+    strokeColor = hex;
+    fillColor = hex;
+    updateColorPreviews();
+    $('customColorPicker').value = hex;
+  }
+
+  $('customColorPicker').addEventListener('input', e=>{
+    applyColor(e.target.value);
+    document.querySelectorAll('.palette-cell.selected').forEach(c=>c.classList.remove('selected'));
+  });
 
   const paletteGrid = $('paletteGrid');
   PALETTE.forEach(hex=>{
@@ -2729,34 +3613,11 @@
     cell.style.background = hex;
     cell.title = hex;
     cell.addEventListener('click', ()=>{
-      applyColorToActiveTarget(hex);
+      applyColor(hex);
       document.querySelectorAll('.palette-cell.selected').forEach(c=>c.classList.remove('selected'));
       cell.classList.add('selected');
     });
     paletteGrid.appendChild(cell);
-  });
-
-  function applyColorToActiveTarget(hex){
-    if(activeColorTarget === 'selectedStroke' && selectedStrokeId != null){
-      const a = actions.find(x=>x.id===selectedStrokeId);
-      if(a){
-        a.color = hex;
-        $('selStrokeColorPreview').style.background = hex;
-        redoStack.length = 0;
-        renderAll();
-      }
-    } else if(activeColorTarget === 'stroke'){
-      strokeColor = hex;
-    } else {
-      fillColor = hex;
-    }
-    updateColorPreviews();
-    $('customColorPicker').value = hex;
-  }
-
-  $('customColorPicker').addEventListener('input', e=>{
-    applyColorToActiveTarget(e.target.value);
-    document.querySelectorAll('.palette-cell.selected').forEach(c=>c.classList.remove('selected'));
   });
 
   $('brushSize').addEventListener('input', e=>{
@@ -2770,30 +3631,14 @@
   });
   $('toleranceRow').style.opacity = '0.4';
 
-  $('selStrokeWidth').addEventListener('input', e=>{
-    const val = parseInt(e.target.value);
-    $('selStrokeWidthVal').textContent = val;
-    if(selectedStrokeId != null){
-      const a = actions.find(x=>x.id===selectedStrokeId);
-      if(a){ a.width = val; redoStack.length = 0; renderAll(); }
-    }
-  });
-  $('deselectStrokeBtn').addEventListener('click', clearStrokeSelection);
-  $('deleteStrokeBtn').addEventListener('click', ()=>{
-    if(selectedStrokeId != null){
-      const idx = actions.findIndex(x=>x.id===selectedStrokeId);
-      if(idx>-1) actions.splice(idx,1);
-    }
-    redoStack.length = 0;
-    clearStrokeSelection();
-  });
 
   $('clearDrawBtn').addEventListener('click', ()=>{
+    if(replaying){ toast('Replaying — please wait.'); return; }
     actions.length = 0;
     redoStack.length = 0;
     selectedStrokeId = null;
-    $('strokeEditor').hidden = true;
-    dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    layers = [createLayer()];
+    activeLayerId = layers[0].id;
     renderAll();
     toast('Canvas reset.');
   });
@@ -2833,14 +3678,16 @@
   function buildRecipeForBBox(bbox){
     const margin = 4;
     const result = [];
+    const layerIndexOf = a => Math.max(0, layers.findIndex(l=>l.id===a.layer));
     actions.forEach(a=>{
+      const li = layerIndexOf(a);
       if(a.type==='stroke'){
         const inside = a.points.some(p=>
           p.x>=bbox.minX-margin && p.x<=bbox.minX+bbox.w+margin &&
           p.y>=bbox.minY-margin && p.y<=bbox.minY+bbox.h+margin);
         if(inside){
           result.push({
-            type:'stroke', tool:a.tool, color:a.color, width:a.width,
+            type:'stroke', tool:a.tool, color:a.color, width:a.width, li,
             points:a.points.map(p=>({x:p.x-bbox.minX, y:p.y-bbox.minY}))
           });
         }
@@ -2848,8 +3695,13 @@
         const inside = a.x>=bbox.minX-margin && a.x<=bbox.minX+bbox.w+margin &&
                         a.y>=bbox.minY-margin && a.y<=bbox.minY+bbox.h+margin;
         if(inside){
-          result.push({ type:'fill', x:a.x-bbox.minX, y:a.y-bbox.minY, color:a.color, tolerance:a.tolerance });
+          const o = { type:'fill', x:a.x-bbox.minX, y:a.y-bbox.minY, color:a.color, tolerance:a.tolerance, li };
+          if(a.src){ o.sli = a.src.map(id => layers.findIndex(l=>l.id===id)).filter(i=>i>=0); }
+          if(a.m){ o.m = a.m; o.ox = Math.round(a.ox||0) - bbox.minX; o.oy = Math.round(a.oy||0) - bbox.minY; }
+          result.push(o);
         }
+      } else if(a.type==='layerRecolor'){
+        result.push({ type:'layerRecolor', color:a.color, li });
       }
     });
     return result;
@@ -2970,19 +3822,32 @@
       const offY = Math.round((ch - oh) / 2);
 
       if(obj.recipe && obj.recipe.length > 0){
+        // Ensure enough layers exist for the recipe's layer indices.
+        const maxLi = obj.recipe.reduce((m,a)=> Math.max(m, a.li || 0, ...(a.sli || [0])), 0);
+        while(layers.length <= maxLi) layers.push(createLayer());
+        const layerIdFor = a => layers[Math.min(a.li || 0, layers.length-1)].id;
         obj.recipe.forEach(a=>{
           if(a.type === 'stroke'){
             actions.push({
               type:'stroke', id:++actionCounter, tool:a.tool, color:a.color, width:a.width,
-              points: a.points.map(p=>({ x:p.x + offX, y:p.y + offY }))
+              points: a.points.map(p=>({ x:p.x + offX, y:p.y + offY })),
+              layer: layerIdFor(a)
             });
           } else if(a.type === 'fill'){
-            actions.push({
+            const act = {
               type:'fill', id:++actionCounter, x:a.x + offX, y:a.y + offY,
-              color:a.color, tolerance:a.tolerance
-            });
+              color:a.color, tolerance:a.tolerance, layer: layerIdFor(a)
+            };
+            if(a.sli && a.sli.length){
+              act.src = [...new Set(a.sli.map(i => layers[Math.min(i, layers.length-1)].id))];
+            }
+            if(a.m){ act.m = a.m; act.ox = (a.ox||0) + offX; act.oy = (a.oy||0) + offY; }
+            actions.push(act);
+          } else if(a.type === 'layerRecolor'){
+            actions.push({ type:'layerRecolor', id:++actionCounter, color:a.color, layer: layerIdFor(a) });
           }
         });
+        renderLayersPanel();
         redoStack.length = 0;
         clearStrokeSelection();
         renderAll();
@@ -2998,7 +3863,7 @@
         const ictx = img.getContext('2d');
         ictx.imageSmoothingEnabled = false;
         ictx.drawImage(obj.canvas, 0, 0);
-        actions.push({ type:'image', id:++actionCounter, img, x:offX, y:offY, w:ow, h:oh });
+        actions.push({ type:'image', id:++actionCounter, img, x:offX, y:offY, w:ow, h:oh, layer: activeLayer().id });
         redoStack.length = 0;
         clearStrokeSelection();
         renderAll();
@@ -3021,11 +3886,9 @@
     const recipe = buildRecipeForBBox(bbox);
     const obj = addObject(cropped, recipe);
     toast(`Registered OBJ-${String(objCounter).padStart(2,'0')} (${cropped.width}×${cropped.height})`);
-    if(!$('keepAfterRegister').checked){
-      actions.length = 0;
-      redoStack.length = 0;
-      clearStrokeSelection();
-    }
+    actions.length = 0;
+    redoStack.length = 0;
+    clearStrokeSelection();
     try {
       await savePatternToFolder(cropped, obj.id, recipe);
     } catch (err) {
@@ -3174,12 +4037,16 @@
           const newColor = isEraser ? a.color : shiftColor(a.color, colorShift);
 
           strokeSmoothPath(cx, finalPts, a.width, newColor, isEraser);
-          redrawnActions.push({ type:'stroke', tool:a.tool, color:newColor, width:a.width, points: finalPts });
+          redrawnActions.push({ type:'stroke', tool:a.tool, color:newColor, width:a.width, points: finalPts, li: a.li || 0 });
         } else if(a.type === 'fill'){
           const finalSeed = transformPt({x:a.x, y:a.y});
           const newColor = shiftColor(a.color, colorShift);
           floodFillApply(cx, finalSeed.x, finalSeed.y, newColor, a.tolerance);
-          redrawnActions.push({ type:'fill', x:finalSeed.x, y:finalSeed.y, color:newColor, tolerance:a.tolerance });
+          redrawnActions.push({ type:'fill', x:finalSeed.x, y:finalSeed.y, color:newColor, tolerance:a.tolerance, li: a.li || 0 });
+        } else if(a.type === 'layerRecolor'){
+          const newColor = shiftColor(a.color, colorShift);
+          applyLayerRecolor(cx, newColor); // flat-canvas approximation
+          redrawnActions.push({ type:'layerRecolor', color:newColor, li: a.li || 0 });
         }
       });
       
@@ -3551,6 +4418,14 @@
 
   paintCompBg();
   updateStat();
+
+  // ---- Layer panel: initial render + keep badges fresh on every renderAll.
+  // Installed here (end of script) so `layers`, `actions`, and `renderAll`
+  // are all initialized before first use.
+  renderLayersPanel();
+  updateNavPreview();
+  const _origRenderAll = renderAll;
+  renderAll = function(){ _origRenderAll(); renderLayersPanel(); };
 })();
 </script>
 </body>
