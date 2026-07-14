@@ -106,7 +106,7 @@
   #traceControls .tc-row .tc-val { min-width: 40px; text-align: right; color: var(--ink); }
   #traceControls .tc-btns { display: flex; gap: 6px; }
   #traceControls .tc-btns button { flex: 1; font-size: 10px; padding: 6px 4px; }
-  canvas { display: block; image-rendering: pixelated; }
+  canvas { display: block; image-rendering: auto; } /* smooth display scaling — AA strokes stay smooth on screen */
   #drawCanvas {
     position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none;
   }
@@ -230,7 +230,7 @@
     background: #fff; background-image: linear-gradient(var(--canvas-grid) 1px, transparent 1px), linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px);
     background-size: 10px 10px; border: 1px solid var(--border-soft);
   }
-  .obj-thumb canvas { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+  .obj-thumb canvas { width: 100%; height: 100%; object-fit: contain; image-rendering: auto; }
   .obj-meta { font-family: var(--font-mono); font-size: 10px; color: var(--ink-dim); display: flex; justify-content: space-between; }
   .obj-actions { display: flex; gap: 4px; }
   .obj-actions .btn { flex: 1; padding: 6px 4px; font-size: 10px; text-align: center; }
@@ -248,7 +248,7 @@
     background-image: linear-gradient(var(--canvas-grid) 1px, transparent 1px), linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px);
     background-size: 10px 10px; border: 1px solid var(--border-soft);
   }
-  .var-thumb canvas { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+  .var-thumb canvas { width: 100%; height: 100%; object-fit: contain; image-rendering: auto; }
   .variation-actions { display: flex; gap: 8px; }
   .variation-actions .btn { flex: 1; }
 
@@ -331,7 +331,7 @@
     cursor: pointer; position: relative; transition: border-color 0.15s; background: #fff;
   }
   .gh-item.selected { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
-  .gh-item img { width: 100%; aspect-ratio: 1/1; object-fit: contain; image-rendering: pixelated; }
+  .gh-item img { width: 100%; aspect-ratio: 1/1; object-fit: contain; image-rendering: auto; }
   .gh-item-name { font-family: var(--font-mono); font-size: 8.5px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 6px; color: var(--ink-dim); }
   .gh-item .check {
     position: absolute; top: 6px; left: 6px; width: 14px; height: 14px; 
@@ -441,7 +441,7 @@
     color: var(--ink); background: var(--panel-alt); border: 1px solid var(--border-soft);
     border-radius: 6px; padding: 18px 10px; width: 100%; box-sizing: border-box;
   }
-  .mgr-node .node-thumb { width: 64px; height: 64px; object-fit: contain; image-rendering: pixelated; border-radius: 4px; }
+  .mgr-node .node-thumb { width: 64px; height: 64px; object-fit: contain; image-rendering: auto; border-radius: 4px; }
   .mgr-node .node-name {
     font-family: var(--font-mono); font-size: 9.5px; color: var(--ink-dim);
     width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -637,6 +637,21 @@
       </label>
 
       <button class="btn btn-accent btn-full" id="registerBtn">REGISTER OBJECT →</button>
+      <div style="display:flex; gap:8px; align-items:stretch;">
+        <button class="btn" id="replayBtn" style="flex:1;" title="Replay the drawing process (trace layer hidden)">▶ REPLAY</button>
+        <button class="btn" id="replaySaveBtn" style="flex:1;" title="Replay and save as a .webm video">⏺ REPLAY 저장</button>
+        <select id="replaySpeed" title="Replay speed" style="font-family:var(--font-mono); font-size:12px; padding:0 8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--ink); cursor:pointer;">
+          <option value="0.25">0.25x</option>
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+          <option value="4">4x</option>
+          <option value="6">6x</option>
+          <option value="8">8x</option>
+          <option value="10">10x</option>
+        </select>
+      </div>
     </section>
 
     <!-- 02 SAMPLES -->
@@ -914,9 +929,131 @@
     showLogin();
   })();
 
+  // ==================== DRAWING REPLAY ====================
+  // Replays the drawing process (strokes point-by-point, fills as beats) on
+  // the 01 canvas. The trace/reference layer is hidden during replay — only
+  // the drawing itself is shown. Optionally records the replay to a .webm
+  // video for saving/sharing.
+  let replaying = false;
+
+  function setTraceVisibleForReplay(visible){
+    traceImg.style.visibility = visible ? '' : 'hidden';
+    if(!visible){
+      traceSelectBox.style.display = 'none';
+      traceControls.classList.remove('show');
+    } else {
+      updateTraceSelectBox();
+    }
+  }
+
+  async function playReplay(opts){
+    const record = !!(opts && opts.record);
+    if(replaying) { toast('Replay already running.'); return; }
+    if(actions.length === 0){ toast('No drawing history to replay.'); return; }
+    replaying = true;
+    clearStrokeSelection();
+    setTraceVisibleForReplay(false);
+    const replayBtnEl = $('replayBtn'), replaySaveBtnEl = $('replaySaveBtn');
+    if(replayBtnEl) replayBtnEl.disabled = true;
+    if(replaySaveBtnEl) replaySaveBtnEl.disabled = true;
+
+    // "completed" layer: finished actions accumulate here
+    const done = document.createElement('canvas');
+    done.width = drawCanvas.width; done.height = drawCanvas.height;
+    const dnx = done.getContext('2d', { willReadFrequently: true });
+
+    let recorder = null;
+    const chunks = [];
+    if(record){
+      if(typeof MediaRecorder === 'undefined'){
+        toast('This browser does not support video recording.');
+      } else {
+        const stream = drawCanvas.captureStream(60);
+        const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9'
+                   : (MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '');
+        try {
+          recorder = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 8000000 } : undefined);
+          recorder.ondataavailable = ev => { if(ev.data && ev.data.size) chunks.push(ev.data); };
+          recorder.start();
+        } catch(e){ console.error(e); recorder = null; toast('Recording failed to start.'); }
+      }
+    }
+
+    const raf = () => new Promise(r => requestAnimationFrame(r));
+    const totalPts = actions.reduce((sum,a)=> sum + (a.type==='stroke' ? a.points.length : 14), 0);
+    // Playback speed (0.25x–4x). Fractional points-per-frame supports slow motion.
+    const speed = parseFloat(($('replaySpeed') && $('replaySpeed').value) || '1') || 1;
+    const ptsPerFrame = Math.max(0.2, (totalPts / 360) * speed); // 1x ≈ 6s @60fps
+    const beat = n => Math.max(1, Math.round(n / speed));
+
+    const blit = ()=>{
+      dctx.save();
+      dctx.globalCompositeOperation = 'source-over';
+      dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+      dctx.drawImage(done, 0, 0);
+      dctx.restore();
+    };
+
+    toast(record ? 'Replaying & recording…' : 'Replaying…');
+    blit(); await raf(); await raf();
+
+    for(const a of actions){
+      if(a.type === 'stroke'){
+        const pts = a.points;
+        const isEraser = a.tool === 'eraser';
+        let prog = 1;
+        while(prog < pts.length){
+          blit();
+          strokeSmoothPath(dctx, pts.slice(0, Math.max(1, Math.ceil(prog))), a.width, a.color, isEraser);
+          await raf();
+          prog += ptsPerFrame;
+        }
+        strokeSmoothPath(dnx, pts, a.width, a.color, isEraser); // commit
+        blit();
+        await raf();
+      } else if(a.type === 'fill'){
+        floodFillApply(dnx, a.x, a.y, a.color, a.tolerance);
+        blit();
+        for(let f=0, m=beat(12); f<m; f++) await raf(); // visual beat
+      } else if(a.type === 'image' && a.img){
+        dnx.drawImage(a.img, a.x, a.y, a.w, a.h);
+        blit();
+        for(let f=0, m=beat(8); f<m; f++) await raf();
+      }
+    }
+
+    // hold the final frame briefly (nicer video ending)
+    for(let f=0, m=beat(30); f<m; f++) await raf();
+
+    renderAll(); // exact final state
+    setTraceVisibleForReplay(true);
+
+    if(recorder && recorder.state !== 'inactive'){
+      await new Promise(res => { recorder.onstop = res; recorder.stop(); });
+      const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
+      saveBlobViaDownload(blob, `replay_${todayFolderName()}_${timeStamp()}.webm`);
+      toast('Replay video saved (.webm)');
+    }
+    if(replayBtnEl) replayBtnEl.disabled = false;
+    if(replaySaveBtnEl) replaySaveBtnEl.disabled = false;
+    replaying = false;
+  }
+
+  $('replayBtn').addEventListener('click', ()=> playReplay());
+  $('replaySaveBtn').addEventListener('click', ()=> playReplay({ record: true }));
+  // Remember replay speed across sessions
+  (function initReplaySpeed(){
+    const KEY = 'nulayer_replay_speed';
+    const sel = $('replaySpeed');
+    const saved = localStorage.getItem(KEY);
+    if(saved && [...sel.options].some(o=>o.value===saved)) sel.value = saved;
+    sel.addEventListener('change', ()=> localStorage.setItem(KEY, sel.value));
+  })();
+
   // ==================== HOTKEYS (단축키 영문화/추가) ====================
   window.addEventListener('keydown', e => {
     if(e.target.tagName === 'INPUT') return;
+    if(replaying) return; // no undo/tool changes mid-replay
     if(e.ctrlKey || e.metaKey) {
       if(e.key.toLowerCase() === 'z') {
         e.preventDefault();
@@ -1136,6 +1273,108 @@
       canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png');
     });
   }
+
+  // ==================== PNG RECIPE EMBEDDING ====================
+  // The drawing process (vector recipe) is stored INSIDE each saved PNG as a
+  // tEXt chunk, so every file carries its own replayable history.
+  const RECIPE_KEYWORD = 'nulayerRecipe';
+  const CRC_TABLE = (()=>{
+    const t = new Uint32Array(256);
+    for(let n=0; n<256; n++){
+      let c = n;
+      for(let k=0; k<8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(bytes, start, end){
+    let c = 0xFFFFFFFF;
+    for(let i=start; i<end; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  function recipeToJson(recipe){
+    // Compact: round coordinates to 0.1px
+    const slim = recipe.map(a=>{
+      if(a.type==='stroke'){
+        return { type:'stroke', tool:a.tool, color:a.color, width:a.width,
+                 points:a.points.map(p=>({x:Math.round(p.x*10)/10, y:Math.round(p.y*10)/10})) };
+      }
+      if(a.type==='fill'){
+        return { type:'fill', x:Math.round(a.x*10)/10, y:Math.round(a.y*10)/10, color:a.color, tolerance:a.tolerance||0 };
+      }
+      return null;
+    }).filter(Boolean);
+    return JSON.stringify(slim);
+  }
+  async function embedRecipeInPng(blob, recipe){
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    const json = recipeToJson(recipe);
+    const kw = RECIPE_KEYWORD;
+    const textBytes = new Uint8Array(kw.length + 1 + json.length);
+    for(let i=0;i<kw.length;i++) textBytes[i] = kw.charCodeAt(i);
+    textBytes[kw.length] = 0;
+    for(let i=0;i<json.length;i++) textBytes[kw.length+1+i] = json.charCodeAt(i) & 0xFF;
+    // chunk = length(4) + 'tEXt'(4) + data + crc(4)
+    const chunk = new Uint8Array(12 + textBytes.length);
+    const dv = new DataView(chunk.buffer);
+    dv.setUint32(0, textBytes.length);
+    chunk[4]=0x74; chunk[5]=0x45; chunk[6]=0x58; chunk[7]=0x74; // tEXt
+    chunk.set(textBytes, 8);
+    dv.setUint32(8 + textBytes.length, crc32(chunk, 4, 8 + textBytes.length));
+    // insert before IEND (last 12 bytes of a valid PNG)
+    const iendPos = buf.length - 12;
+    const out = new Uint8Array(buf.length + chunk.length);
+    out.set(buf.subarray(0, iendPos), 0);
+    out.set(chunk, iendPos);
+    out.set(buf.subarray(iendPos), iendPos + chunk.length);
+    return new Blob([out], { type: 'image/png' });
+  }
+  function extractRecipeFromPng(arrayBuffer){
+    try {
+      const b = new Uint8Array(arrayBuffer);
+      if(b.length < 8 || b[0]!==0x89 || b[1]!==0x50) return null; // not PNG
+      const dv = new DataView(arrayBuffer);
+      let pos = 8;
+      while(pos + 12 <= b.length){
+        const len = dv.getUint32(pos);
+        const type = String.fromCharCode(b[pos+4],b[pos+5],b[pos+6],b[pos+7]);
+        if(type === 'tEXt'){
+          const data = b.subarray(pos+8, pos+8+len);
+          let z = -1;
+          for(let i=0;i<data.length;i++){ if(data[i]===0){ z=i; break; } }
+          if(z > 0){
+            let kw=''; for(let i=0;i<z;i++) kw += String.fromCharCode(data[i]);
+            if(kw === RECIPE_KEYWORD){
+              let txt=''; for(let i=z+1;i<data.length;i++) txt += String.fromCharCode(data[i]);
+              const recipe = JSON.parse(txt);
+              return Array.isArray(recipe) && recipe.length ? recipe : null;
+            }
+          }
+        }
+        if(type === 'IEND') break;
+        pos += 12 + len;
+      }
+    } catch(e){ console.warn('recipe parse failed', e); }
+    return null;
+  }
+  async function canvasToRecipeBlob(canvas, recipe){
+    const blob = await canvasToBlob(canvas);
+    if(recipe && recipe.length){
+      try { return await embedRecipeInPng(blob, recipe); }
+      catch(e){ console.warn('recipe embed failed', e); }
+    }
+    return blob;
+  }
+  function saveBlobViaDownload(blob, filename){
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = url;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 3000);
+  }
   function updateFolderChip(){
     const chip = $('folderChip');
     const status = $('folderStatus');
@@ -1229,12 +1468,11 @@
     });
   }
 
-  async function commitToGitHub(canvas, filename, dateFolder){
+  async function commitToGitHub(blob, filename, dateFolder){
     if(!ghConfig || !ghConfig.token) throw new Error('No GitHub config.');
     const { owner, repo, branch, path, token } = ghConfig;
     const pathPrefix = (path || 'gallery').replace(/^\/+|\/+$/g,'');
     const fullPath = `${pathPrefix}/${dateFolder}/${filename}`;
-    const blob = await canvasToBlob(canvas);
     const base64 = await blobToBase64(blob);
 
     const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURI(fullPath)}`;
@@ -1276,11 +1514,14 @@
     return await res.json();
   }
 
-  async function savePatternToFolder(canvas, objId){
+  async function savePatternToFolder(canvas, objId, recipe){
     const now = new Date();
     const dateFolder = todayFolderName(now);
     const roleTag = userRole === 'master' ? 'MASTER' : 'GUEST';
     const filename = `pattern_${dateFolder}_${timeStamp(now)}_${roleTag}_OBJ-${pad2(objId)}.png`;
+
+    // Recipe (drawing history) is embedded into the PNG itself.
+    const blob = await canvasToRecipeBlob(canvas, recipe);
 
     const results = [];
     if(baseDirHandle){
@@ -1288,7 +1529,6 @@
         const dirHandle = await baseDirHandle.getDirectoryHandle(dateFolder, { create: true });
         const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
         const writable = await fileHandle.createWritable();
-        const blob = await canvasToBlob(canvas);
         await writable.write(blob);
         await writable.close();
         results.push(`Local: ${dateFolder}/`);
@@ -1297,13 +1537,13 @@
         results.push(`Local Failed`);
       }
     } else if(!ghConfig){
-      saveViaDownload(canvas, filename);
+      saveBlobViaDownload(blob, filename);
       results.push(`Downloaded: ${filename}`);
     }
 
     if(ghConfig && ghConfig.token){
       try {
-        const path = await commitToGitHub(canvas, filename, dateFolder);
+        const path = await commitToGitHub(blob, filename, dateFolder);
         results.push(`GitHub: ${path}`);
       } catch(e){
         console.error(e);
@@ -1314,29 +1554,37 @@
     updateFolderChip();
   }
 
-  function loadImageFile(file){
+  async function loadImageFile(file){
+    if(!file.type.startsWith('image/')) return null;
+    if(loadedFilenames.has(file.name)) return null;
+
+    // Recover the embedded drawing history (recipe), if the PNG carries one.
+    let recipe = null;
+    if(/png$/i.test(file.type) || /\.png$/i.test(file.name)){
+      try { recipe = extractRecipeFromPng(await file.arrayBuffer()); }
+      catch(e){ /* not a recipe PNG */ }
+    }
+
     return new Promise((resolve, reject)=>{
-      if(!file.type.startsWith('image/')){ resolve(null); return; }
-      
-      if(loadedFilenames.has(file.name)){
-        resolve(null);
-        return;
-      }
-      
       const img = new Image();
       const url = URL.createObjectURL(file);
       img.onload = () => {
         const c = document.createElement('canvas');
         c.width = img.width; c.height = img.height;
         const cx = c.getContext('2d');
-        // Disable smoothing
-        cx.imageSmoothingEnabled = false;
         cx.drawImage(img, 0, 0);
         URL.revokeObjectURL(url);
         const bbox = getBBox(c);
         const finalC = bbox ? cropCanvas(c, bbox) : c;
-        
-        addObject(finalC, null, file.name); 
+        // Keep recipe coordinates aligned if cropping shifted the origin.
+        if(recipe && bbox && (bbox.minX || bbox.minY)){
+          recipe = recipe.map(a=>{
+            if(a.type==='stroke') return { ...a, points:a.points.map(p=>({x:p.x-bbox.minX, y:p.y-bbox.minY})) };
+            if(a.type==='fill')   return { ...a, x:a.x-bbox.minX, y:a.y-bbox.minY };
+            return a;
+          });
+        }
+        addObject(finalC, recipe, file.name);
         resolve(finalC);
       };
       img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image Load Failed: '+file.name)); };
@@ -2001,7 +2249,7 @@
       const size = brushSize * (rect.width / 1080);
       cursorCircle.style.width = size + 'px';
       cursorCircle.style.height = size + 'px';
-      cursorCircle.style.borderRadius = '0'; // Square cursor to match square brush
+      cursorCircle.style.borderRadius = '50%'; // Round cursor to match round AA brush
       if (e) {
         cursorCircle.style.left = (e.clientX - rect.left) + 'px';
         cursorCircle.style.top = (e.clientY - rect.top) + 'px';
@@ -2056,28 +2304,19 @@
 
   // ==================== PIXEL PERFECT (ALIASED) DRAWING ====================
   // 브레즌햄 선 그리기 (계단 현상 그대로, 부드러운 효과 없음) -> 버킷 채우기 완벽 호환
-  function drawAliasedLine(ctx, x0, y0, x1, y1, size, color, isEraser) {
-    x0 = Math.floor(x0); y0 = Math.floor(y0);
-    x1 = Math.floor(x1); y1 = Math.floor(y1);
-    const dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
-    const dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
-    let err = dx + dy, e2;
-    
-    ctx.fillStyle = isEraser ? 'rgba(0,0,0,1)' : color;
-    ctx.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over';
-    
-    const offset = Math.floor(size / 2);
-    while (true) {
-      ctx.fillRect(x0 - offset, y0 - offset, size, size);
-      if (x0 === x1 && y0 === y1) break;
-      e2 = 2 * err;
-      if (e2 >= dy) { err += dy; x0 += sx; }
-      if (e2 <= dx) { err += dx; y0 += sy; }
-    }
-    // Always restore default compositing so eraser mode never leaks into later draws.
-    ctx.globalCompositeOperation = 'source-over';
-  }
+  // (Legacy per-segment line renderer removed — all strokes now render
+  //  through strokeSmoothPath as a single anti-aliased path.)
 
+  // Gap-free flood fill for anti-aliased artwork.
+  // Strategy:
+  //  1. Scanline flood fill builds a mask of matching pixels (as before).
+  //  2. The mask is dilated a few pixels so it reaches UNDER the anti-aliased
+  //     edge of strokes.
+  //  3. Fill color is composited UNDERNEATH existing pixels in the expanded
+  //     area:  out = src OVER fillColor.  Fully opaque pixels are untouched,
+  //     while semi-transparent AA edge pixels blend into the fill color —
+  //     eliminating the white halo/gap completely.
+  const FILL_EXPAND = 4; // px of dilation under the AA edge
   function floodFillApply(ctx, seedX, seedY, hexColor, tol){
     const w = ctx.canvas.width, h = ctx.canvas.height;
     seedX = Math.max(0, Math.min(w-1, Math.floor(seedX)));
@@ -2091,46 +2330,153 @@
     if(Math.abs(sr-fr)<3 && Math.abs(sg-fg)<3 && Math.abs(sb-fb)<3 && sa>250) return;
 
     const tol2 = tol*tol*4 + 1;
+    // When filling a (near-)empty region, pixels that are almost fully
+    // transparent (faint AA dust, alpha ≤ 24) also count as matching —
+    // they can't be an intended boundary, and the under-blend keeps them
+    // rendered on top of the fill anyway. This stops specks from blocking
+    // the flood and leaving pinhole gaps.
+    const seedIsEmpty = sa <= 24;
     function matches(i){
+      if(seedIsEmpty && data[i+3] <= 24) return true;
       const dr=data[i]-sr, dg=data[i+1]-sg, db=data[i+2]-sb, da=data[i+3]-sa;
       return (dr*dr+dg*dg+db*db+da*da) <= tol2;
     }
-    const visited = new Uint8Array(w*h);
+
+    // ---- Stage 1: build region mask via scanline flood fill ----
+    const mask = new Uint8Array(w*h);   // 1 = core region
     const stack = [[seedX,seedY]];
     while(stack.length){
       const [x,y] = stack.pop();
       if(x<0||x>=w||y<0||y>=h) continue;
       const vi = y*w+x;
-      if(visited[vi]) continue;
-      const i = idx(x,y);
-      if(!matches(i)) continue;
+      if(mask[vi]) continue;
+      if(!matches(idx(x,y))) continue;
       let xl = x;
-      while(xl>0 && !visited[y*w+xl-1] && matches(idx(xl-1,y))) xl--;
+      while(xl>0 && !mask[y*w+xl-1] && matches(idx(xl-1,y))) xl--;
       let xr = x;
-      while(xr<w-1 && !visited[y*w+xr+1] && matches(idx(xr+1,y))) xr++;
+      while(xr<w-1 && !mask[y*w+xr+1] && matches(idx(xr+1,y))) xr++;
       for(let xx=xl; xx<=xr; xx++){
-        const ii = idx(xx,y);
-        data[ii]=fr; data[ii+1]=fg; data[ii+2]=fb; data[ii+3]=255;
-        visited[y*w+xx]=1;
-        if(y>0 && !visited[(y-1)*w+xx] && matches(idx(xx,y-1))) stack.push([xx,y-1]);
-        if(y<h-1 && !visited[(y+1)*w+xx] && matches(idx(xx,y+1))) stack.push([xx,y+1]);
+        mask[y*w+xx]=1;
+        if(y>0 && !mask[(y-1)*w+xx] && matches(idx(xx,y-1))) stack.push([xx,y-1]);
+        if(y<h-1 && !mask[(y+1)*w+xx] && matches(idx(xx,y+1))) stack.push([xx,y+1]);
+      }
+    }
+
+    // ---- Stage 2: dilate mask so fill reaches under the AA stroke edge ----
+    // mask value: 1 = core, 2 = expansion ring
+    let frontier = [];
+    for(let y=0; y<h; y++){
+      for(let x=0; x<w; x++){
+        if(mask[y*w+x]===1){
+          if((x>0 && !mask[y*w+x-1]) || (x<w-1 && !mask[y*w+x+1]) ||
+             (y>0 && !mask[(y-1)*w+x]) || (y<h-1 && !mask[(y+1)*w+x])){
+            frontier.push(y*w+x);
+          }
+        }
+      }
+    }
+    for(let step=0; step<FILL_EXPAND; step++){
+      const next = [];
+      for(const vi of frontier){
+        const x = vi % w, y = (vi - x) / w;
+        const nbs = [];
+        if(x>0) nbs.push(vi-1);
+        if(x<w-1) nbs.push(vi+1);
+        if(y>0) nbs.push(vi-w);
+        if(y<h-1) nbs.push(vi+w);
+        for(const ni of nbs){
+          if(!mask[ni]){ mask[ni]=2; next.push(ni); }
+        }
+      }
+      frontier = next;
+      if(!frontier.length) break;
+    }
+
+    // ---- Stage 3: write pixels ----
+    for(let vi=0; vi<w*h; vi++){
+      const m = mask[vi];
+      if(!m) continue;
+      const i = vi*4;
+      const a = data[i+3];
+      if(m===1 && a>=250){
+        // Core, fully opaque (e.g. recoloring an existing solid fill) → replace.
+        data[i]=fr; data[i+1]=fg; data[i+2]=fb; data[i+3]=255;
+      } else {
+        // Core semi-transparent OR expansion ring:
+        // composite the existing pixel OVER the fill color (fill goes underneath).
+        // Fully opaque pixels here are a no-op, so strokes are never damaged.
+        const sa2 = a / 255;
+        data[i]   = Math.round(data[i]  *sa2 + fr*(1-sa2));
+        data[i+1] = Math.round(data[i+1]*sa2 + fg*(1-sa2));
+        data[i+2] = Math.round(data[i+2]*sa2 + fb*(1-sa2));
+        data[i+3] = 255;
       }
     }
     ctx.putImageData(imgData,0,0);
   }
 
-  function renderStrokeFull(ctx, action){
-    const pts = action.points;
-    if(pts.length===0) return;
-    const isEraser = action.tool === 'eraser';
-    
-    if(pts.length===1){
-      drawAliasedLine(ctx, pts[0].x, pts[0].y, pts[0].x, pts[0].y, action.width, action.color, isEraser);
-    } else {
-      for(let i=1; i<pts.length; i++){
-        drawAliasedLine(ctx, pts[i-1].x, pts[i-1].y, pts[i].x, pts[i].y, action.width, action.color, isEraser);
+  // Render an entire stroke as ONE smooth path (quadratic curves through
+  // midpoints) with a single stroke() call. This is the key to non-grainy
+  // lines: drawing segment-by-segment stacks each segment's semi-transparent
+  // AA edge on top of the previous one, producing a rough "beaded" edge.
+  // One path → one uniform anti-aliased edge.
+  // Weighted moving-average smoothing (2 passes, endpoints preserved).
+  // Applied at render time, so live drawing, undo/redo replay, and
+  // variation recolor all produce the identical smooth result.
+  function smoothPoints(pts){
+    if(pts.length < 3) return pts;
+    let cur = pts;
+    for(let pass=0; pass<2; pass++){
+      const out = [cur[0]];
+      for(let i=1; i<cur.length-1; i++){
+        out.push({
+          x: cur[i-1].x*0.25 + cur[i].x*0.5 + cur[i+1].x*0.25,
+          y: cur[i-1].y*0.25 + cur[i].y*0.5 + cur[i+1].y*0.25
+        });
       }
+      out.push(cur[cur.length-1]);
+      cur = out;
     }
+    return cur;
+  }
+
+  function strokeSmoothPath(ctx, rawPts, width, color, isEraser){
+    if(!rawPts || rawPts.length===0) return;
+    const pts = smoothPoints(rawPts);
+    ctx.save();
+    ctx.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over';
+    ctx.strokeStyle = isEraser ? 'rgba(0,0,0,1)' : color;
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if(pts.length === 1){
+      ctx.beginPath();
+      ctx.arc(pts[0].x, pts[0].y, width/2, 0, Math.PI*2);
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      if(pts.length === 2){
+        ctx.lineTo(pts[1].x, pts[1].y);
+      } else {
+        // Quadratic smoothing: curve through each point toward the midpoint
+        // of it and the next — removes hand jitter and polyline corners.
+        for(let i=1; i<pts.length-1; i++){
+          const mx = (pts[i].x + pts[i+1].x) / 2;
+          const my = (pts[i].y + pts[i+1].y) / 2;
+          ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+        }
+        ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  function renderStrokeFull(ctx, action){
+    strokeSmoothPath(ctx, action.points, action.width, action.color, action.tool === 'eraser');
   }
 
   function drawSelectionHighlight(a){
@@ -2226,6 +2572,7 @@
       e.preventDefault();
       return;
     }
+    if(replaying){ toast('Replaying — please wait.'); return; }
 
     const p = getPos(e);
 
@@ -2255,21 +2602,57 @@
 
     drawing = true;
     drawCanvas.setPointerCapture(e.pointerId);
+    lastRawPos = p;
     currentAction = { type:'stroke', id:++actionCounter, tool:currentTool, color:strokeColor, width:brushSize, points:[p] };
-    drawAliasedLine(dctx, p.x, p.y, p.x, p.y, brushSize, strokeColor, currentTool === 'eraser');
+    takeStrokeSnapshot();
+    repaintLiveStroke();
   });
+
+  // ---- Live stroke: snapshot + full repaint ----
+  // The canvas state before the stroke starts is snapshotted; every pointer
+  // move restores it and re-renders the WHOLE current stroke as one smooth
+  // path. This prevents AA edges of individual segments from stacking up
+  // (the cause of grainy-looking lines).
+  let strokeSnapshot = null;
+  function takeStrokeSnapshot(){
+    if(!strokeSnapshot){
+      strokeSnapshot = document.createElement('canvas');
+      strokeSnapshot.width = drawCanvas.width;
+      strokeSnapshot.height = drawCanvas.height;
+    }
+    const sctx = strokeSnapshot.getContext('2d');
+    sctx.clearRect(0, 0, strokeSnapshot.width, strokeSnapshot.height);
+    sctx.drawImage(drawCanvas, 0, 0);
+  }
+  function repaintLiveStroke(){
+    if(!currentAction) return;
+    dctx.save();
+    dctx.globalCompositeOperation = 'source-over';
+    dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    dctx.drawImage(strokeSnapshot, 0, 0);
+    dctx.restore();
+    renderStrokeFull(dctx, currentAction);
+  }
+
+  // ---- Lazy brush: the brush trails the pointer on a "string" of radius
+  // LAZY_RADIUS. The brush only moves when the string is taut, which filters
+  // out hand jitter completely and produces very fluid, calligraphic lines.
+  const LAZY_RADIUS = 6; // canvas px (1080-scale); ~2px on screen
+  let lastRawPos = null;
 
   drawCanvas.addEventListener('pointermove', e=>{
     updateCursorState(e);
     if(!drawing || !currentAction) return;
     const p = getPos(e);
-    currentAction.points.push(p);
+    lastRawPos = p;
     const pts = currentAction.points;
-    const l = pts.length;
-    if(l > 1){
-      const prev = pts[l-2];
-      drawAliasedLine(dctx, prev.x, prev.y, p.x, p.y, brushSize, strokeColor, currentTool === 'eraser');
-    }
+    const last = pts[pts.length-1];
+    const dx = p.x - last.x, dy = p.y - last.y;
+    const dist = Math.hypot(dx, dy);
+    if(dist <= LAZY_RADIUS) return; // string is slack → brush stays put
+    const t = (dist - LAZY_RADIUS) / dist;
+    pts.push({ x: last.x + dx * t, y: last.y + dy * t });
+    repaintLiveStroke();
   });
 
   drawCanvas.addEventListener('pointerenter', e => updateCursorState(e));
@@ -2279,10 +2662,19 @@
     if(drawing){
       drawing = false;
       if(currentAction && currentAction.points.length>0){
+        // Catch the lazy-brush tail up to the actual final pointer position
+        // so the line ends exactly where the user lifted.
+        const pts = currentAction.points;
+        const last = pts[pts.length-1];
+        if(lastRawPos && Math.hypot(lastRawPos.x-last.x, lastRawPos.y-last.y) > 0.5){
+          pts.push({ x: lastRawPos.x, y: lastRawPos.y });
+          repaintLiveStroke();
+        }
         actions.push(currentAction);
         redoStack.length = 0; 
       }
       currentAction = null;
+      lastRawPos = null;
     }
   }
   window.addEventListener('pointerup', endStroke);
@@ -2535,6 +2927,20 @@
       varBtn.addEventListener('click', ()=> selectForVariation(obj));
       actionsRow.appendChild(varBtn);
 
+      // Replay: only for samples that carry a drawing history (recipe)
+      if(obj.recipe && obj.recipe.length){
+        const rpBtn = document.createElement('button');
+        rpBtn.className = 'btn btn-sm';
+        rpBtn.textContent = '▶ RP';
+        rpBtn.title = 'Load onto the drawing canvas and replay the drawing process';
+        rpBtn.addEventListener('click', ()=>{
+          if(replaying){ toast('Replaying — please wait.'); return; }
+          loadSampleToDrawing(obj);
+          setTimeout(()=> playReplay(), 80);
+        });
+        actionsRow.appendChild(rpBtn);
+      }
+
       // Delete from samples list (available to all roles — removes locally only)
       const delBtn = document.createElement('button');
       delBtn.className = 'btn btn-sm btn-danger';
@@ -2605,6 +3011,7 @@
   }
 
   $('registerBtn').addEventListener('click', async ()=>{
+    if(replaying){ toast('Replaying — please wait.'); return; }
     const bbox = getBBox(drawCanvas);
     if(!bbox){
       toast('Draw something on canvas first.');
@@ -2620,7 +3027,7 @@
       clearStrokeSelection();
     }
     try {
-      await savePatternToFolder(cropped, obj.id);
+      await savePatternToFolder(cropped, obj.id, recipe);
     } catch (err) {
       console.error(err);
       toast('Save error: ' + (err.message || err));
@@ -2737,7 +3144,8 @@
     const c = document.createElement('canvas');
     c.width = size; c.height = size;
     const cx = c.getContext('2d');
-    cx.imageSmoothingEnabled = false;
+    cx.imageSmoothingEnabled = true;   // smooth transforms for AA artwork
+    cx.imageSmoothingQuality = 'high';
 
     // Use recipe if available to redraw cleanly
     if(obj.recipe && obj.recipe.length > 0) {
@@ -2765,13 +3173,7 @@
           const isEraser = a.tool === 'eraser';
           const newColor = isEraser ? a.color : shiftColor(a.color, colorShift);
 
-          if(finalPts.length===1){
-            drawAliasedLine(cx, finalPts[0].x, finalPts[0].y, finalPts[0].x, finalPts[0].y, a.width, newColor, isEraser);
-          } else {
-            for(let i=1; i<finalPts.length; i++){
-              drawAliasedLine(cx, finalPts[i-1].x, finalPts[i-1].y, finalPts[i].x, finalPts[i].y, a.width, newColor, isEraser);
-            }
-          }
+          strokeSmoothPath(cx, finalPts, a.width, newColor, isEraser);
           redrawnActions.push({ type:'stroke', tool:a.tool, color:newColor, width:a.width, points: finalPts });
         } else if(a.type === 'fill'){
           const finalSeed = transformPt({x:a.x, y:a.y});
@@ -2837,7 +3239,7 @@
         const c = makeThumbCanvas(vc.canvas);
         const obj = addObject(c, vc.recipe);
         toast('Variation added.');
-        try { await savePatternToFolder(c, obj.id); } catch(e){ console.error(e); }
+        try { await savePatternToFolder(c, obj.id, vc.recipe); } catch(e){ console.error(e); }
       });
       card.appendChild(addBtn);
       grid.appendChild(card);
@@ -2851,11 +3253,11 @@
     for(const vc of variationsCache){
       const c = makeThumbCanvas(vc.canvas);
       const obj = addObject(c, vc.recipe);
-      added.push({ c, id: obj.id });
+      added.push({ c, id: obj.id, recipe: vc.recipe });
     }
     toast('Added all variations.');
     for(const it of added){
-      try { await savePatternToFolder(it.c, it.id); } catch(e){ console.error(e); }
+      try { await savePatternToFolder(it.c, it.id, it.recipe); } catch(e){ console.error(e); }
     }
   });
 
@@ -2898,8 +3300,8 @@
     off.width  = Math.ceil(w + pad * 2);
     off.height = Math.ceil(h + pad * 2);
     const octx = off.getContext('2d');
-    octx.imageSmoothingEnabled = false;
-
+    octx.imageSmoothingEnabled = aaEnabled();
+    octx.imageSmoothingQuality = 'high';
     const r = haloPx;
     const d = haloPx * 0.7071;
     const offsets = [[-r, 0], [r, 0], [0, -r], [0, r], [-d, -d], [d, -d], [-d, d], [d, d]];
