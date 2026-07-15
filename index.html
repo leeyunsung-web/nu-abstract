@@ -215,7 +215,9 @@
     border: 1px solid var(--border); background: var(--panel); color: var(--ink); cursor: pointer;
   }
   .layers-head button:hover { background: var(--border-soft); }
-  .layer-list { display: flex; flex-direction: column-reverse; gap: 4px; } /* top layer shown first */
+  /* JS now emits rows top-of-stack first (folder header above its members),
+     so the list must NOT be visually reversed anymore. */
+  .layer-list { display: flex; flex-direction: column; gap: 4px; }
   .layer-row {
     display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px;
     border: 1px solid var(--border-soft); background: var(--panel); cursor: pointer;
@@ -233,6 +235,8 @@
   }
   .layer-folder-row.active { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
   .layer-folder-row.drag-over { outline: 2px dashed var(--ink); outline-offset: 1px; background: var(--border-soft); }
+  .folder-caret { width: 12px; text-align: center; cursor: pointer; opacity: 0.7; font-size: 9px; user-select: none; }
+  .folder-caret:hover { opacity: 1; }
   .layer-row.multi-sel { border-color: var(--ink); background: var(--border-soft); }
   .layer-rename {
     flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 11px;
@@ -733,7 +737,7 @@
       </div>
       <div class="layers-wrap">
         <div class="layers-head">
-          <span>LAYERS</span>
+          <span>LAYERS <span style="opacity:0.4;font-size:9px;">v3</span></span>
           <div class="layers-btns">
             <button id="layerAddBtn" title="Add layer">＋</button>
             <button id="layerUpBtn" title="Move active layer up">↑</button>
@@ -1225,6 +1229,7 @@
     actions.push({ type:'folderMove', id:++actionCounter, l, prev: l.folderId || null, next: f.id });
     redoStack.length = 0;
     l.folderId = f.id;
+    f.collapsed = false; // reveal the newly added member
     renderLayersPanel();
     toast(`${l.name} moved into ${f.name}.`);
   }
@@ -1256,7 +1261,6 @@
     selectedLayerIds = new Set([...selectedLayerIds].filter(id => layers.some(l=>l.id===id)));
     const list = $('layerList');
     list.innerHTML = '';
-    const headerDone = new Set();
 
     // right-click on empty panel space \u2192 create an empty folder
     list.oncontextmenu = ev=>{
@@ -1273,6 +1277,16 @@
       row.className = 'layer-folder-row' + (activeFolderId === f.id ? ' active' : '');
       row.dataset.folderId = f.id;
       row.title = 'Click to select the folder (SELECT tool moves it as one). Drop a layer here to move it in. Right-click for options.';
+      const caret = document.createElement('span');
+      caret.className = 'folder-caret';
+      caret.textContent = f.collapsed ? '▶' : '▼';
+      caret.title = f.collapsed ? 'Expand folder' : 'Collapse folder';
+      caret.addEventListener('click', ev=>{
+        ev.stopPropagation();
+        f.collapsed = !f.collapsed;
+        renderLayersPanel();
+      });
+      row.appendChild(caret);
       const eye = document.createElement('span');
       eye.className = 'layer-eye';
       const anyVisible = members.some(m=>m.visible);
@@ -1315,10 +1329,39 @@ showLayerMenu(ev.clientX, ev.clientY, [
       return row;
     };
 
-    layers.forEach(l=>{
-      if(l.folderId != null && !headerDone.has(l.folderId)){
+    // Build display order: top-of-stack first (Photoshop convention). Each
+    // folder is emitted as a HEADER followed by its members, and the whole
+    // folder block sits where its TOP-MOST member is in the stack.
+    const rowsOrder = [];      // { kind:'folder', f } | { kind:'layer', l }
+    const emittedFolders = new Set();
+    for(let i = layers.length - 1; i >= 0; i--){
+      const l = layers[i];
+      if(l.folderId != null){
         const f = folders.find(x=>x.id===l.folderId);
-        if(f){ list.appendChild(makeFolderRow(f)); headerDone.add(f.id); }
+        if(f && !emittedFolders.has(f.id)){
+          emittedFolders.add(f.id);
+          rowsOrder.push({ kind:'folder', f });
+          // members, top-of-stack first (they're contiguous in the array)
+          const mem = layers.filter(x=>x.folderId===f.id);
+          for(let k = mem.length - 1; k >= 0; k--) rowsOrder.push({ kind:'layer', l: mem[k] });
+        }
+        continue; // members handled with their header
+      }
+      rowsOrder.push({ kind:'layer', l });
+    }
+    // Empty folders (no members yet) - show their headers at the top so
+    // layers can still be dragged into them.
+    folders.forEach(f=>{
+      if(!emittedFolders.has(f.id)) rowsOrder.unshift({ kind:'folder', f });
+    });
+
+    rowsOrder.forEach(entry=>{
+      if(entry.kind === 'folder'){ list.appendChild(makeFolderRow(entry.f)); return; }
+      const l = entry.l;
+      // Hide member rows of a collapsed folder (header still shown above).
+      if(l.folderId != null){
+        const pf = folders.find(x=>x.id===l.folderId);
+        if(pf && pf.collapsed) return;
       }
       const row = document.createElement('div');
       row.className = 'layer-row' + (l.id === activeLayerId ? ' active' : '')
@@ -1447,12 +1490,6 @@ showLayerMenu(ev.clientX, ev.clientY, [
       row.addEventListener('pointercancel', endLayerDrag);
 
       list.appendChild(row);
-    });
-
-    // Folders with no members yet: show their headers at the end so layers
-    // can be dragged into them.
-    folders.forEach(f=>{
-      if(!headerDone.has(f.id)) list.appendChild(makeFolderRow(f));
     });
   }
 
@@ -5809,7 +5846,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
     return JSON.stringify({
       v: 1, ts: Date.now(),
       layers: layers.map(l=>({ id:l.id, name:l.name, visible:l.visible, f: l.folderId || 0 })),
-      folders: folders.map(f=>({ id:f.id, name:f.name })),
+      folders: folders.map(f=>({ id:f.id, name:f.name, c: f.collapsed ? 1 : 0 })),
       active: activeLayerId,
       acts
     });
@@ -5849,7 +5886,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
         return l;
       });
       layerIdCounter = Math.max(layerIdCounter, ...st.layers.map(l=>l.id));
-      folders = Array.isArray(st.folders) ? st.folders.map(f=>({ id:f.id, name:f.name })) : [];
+      folders = Array.isArray(st.folders) ? st.folders.map(f=>({ id:f.id, name:f.name, collapsed: !!f.c })) : [];
       if(folders.length) folderIdCounter = Math.max(folderIdCounter, ...folders.map(f=>f.id));
       activeFolderId = null;
       activeLayerId = st.layers.some(l=>l.id===st.active) ? st.active : layers[layers.length-1].id;
