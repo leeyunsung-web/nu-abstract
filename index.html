@@ -933,7 +933,7 @@
         <div class="comp-btns">
           <button class="btn btn-accent" id="genCompBtn">GENERATE RANDOM ✦</button>
           <button class="btn" id="clearCompBtn">CLEAR</button>
-          <button class="btn btn-ghost" id="downloadCompBtn">SAVE PNG</button>
+          <button class="btn btn-ghost" id="downloadCompBtn" title="Saves the full-size PNG to the GALLERY page (no local download)">SAVE PNG → GALLERY</button>
         </div>
       </div>
     </section>
@@ -6396,14 +6396,45 @@ showLayerMenu(ev.clientX, ev.clientY, [
     paintCompBg();
   });
 
-  $('downloadCompBtn').addEventListener('click', ()=>{
-    selectedItemIdx = null; 
+  // SAVE PNG → uploads the full-size composition (1080×1080, untouched) to
+  // the GALLERY page instead of downloading locally. Download later from
+  // gallery.html.
+  async function saveCompositionToGallery(){
+    if(replaying){ toast('Replaying — please wait.'); return; }
+    if(!ghConfig || !ghConfig.token){
+      toast('Connect GitHub (master) first — compositions are saved to the GALLERY page.');
+      return;
+    }
+    selectedItemIdx = null;
     renderComposition();
-    const link = document.createElement('a');
-    link.download = 'objet-composition.png';
-    link.href = compCanvas.toDataURL('image/png');
-    link.click();
-  });
+    toast('Saving to gallery…');
+    try {
+      const blob = await new Promise(r => compCanvas.toBlob(r, 'image/png'));
+      const base64 = await blobToBase64(blob);
+      const filename = `comp-${new Date().toISOString().replace(/[:.]/g,'-')}.png`;
+      const { owner, repo, branch, token } = ghConfig;
+      const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURI('compositions/' + filename)}`;
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Accept': 'application/vnd.github+json',
+          'Authorization': `Bearer ${token}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ message: `Add ${filename}`, content: base64, branch: branch || 'main' })
+      });
+      if(!res.ok){
+        const err = await res.json().catch(()=>({}));
+        throw new Error(`${res.status}: ${err.message || res.statusText}`);
+      }
+      toast('Saved to GALLERY ✓ (download it from gallery.html)');
+    } catch(err){
+      console.error(err);
+      toast('Gallery save failed: ' + (err.message || err));
+    }
+  }
+  $('downloadCompBtn').addEventListener('click', saveCompositionToGallery);
 
   paintCompBg();
   updateStat();
