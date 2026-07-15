@@ -111,7 +111,19 @@
   }
   const gh = loadGh();
   const token = gh && gh.token ? gh.token : null;
-  const isMaster = !!token;
+  const ROLE_KEY = 'nulayer_role';
+  function roleIsMaster(){
+    try { return localStorage.getItem(ROLE_KEY) === 'master'; } catch(e){ return false; }
+  }
+  const isMaster = !!token && roleIsMaster();
+
+  // If the studio switches back to guest while the gallery is open,
+  // delete buttons disappear immediately.
+  window.addEventListener('storage', ev=>{
+    if(ev.key === ROLE_KEY && !roleIsMaster()){
+      document.querySelectorAll('.del-btn').forEach(b=> b.remove());
+    }
+  });
 
   function ghHeaders(){
     const h = { 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };

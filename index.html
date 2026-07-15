@@ -1116,6 +1116,7 @@
   // Initialize: ALWAYS enter as guest — no login popup. Master is one
   // SWITCH-button + password away.
   (function initRole(){
+    localStorage.setItem(ROLE_KEY, 'guest'); // other pages (gallery) read this
     applyRole('guest');
   })();
 
