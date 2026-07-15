@@ -730,22 +730,7 @@
         <button class="btn btn-sm btn-full" id="liveTexBtn"
           title="When ON, changing TEXTURE or GRAIN re-textures every stroke on the ACTIVE layer in real time (undoable)">◈ LIVE → ACTIVE LAYER: OFF</button>
       </div>
-      <div class="tool-row" id="paperRow" style="display:none;gap:6px;flex-wrap:wrap;align-items:center;">
-        <span class="tex-label" title="MASTER only — display-only paper grain, never baked into objects or exports">PAPER</span>
-        <div class="tex-group">
-          <button class="paper-btn active" data-paper="none" title="Plain surface">NONE</button>
-          <button class="paper-btn" data-paper="paper" title="Fine drawing-paper tooth">PAPER</button>
-          <button class="paper-btn" data-paper="canvas" title="Woven canvas fabric">CANVAS</button>
-          <button class="paper-btn" data-paper="rough" title="Coarse rough grain">ROUGH</button>
-          <button class="paper-btn" data-paper="custom" id="paperUploadBtn" title="Upload your own texture image">⬆ UPLOAD</button>
-        </div>
-        <input type="file" id="paperFile" accept="image/*" style="display:none;">
-        <div class="range-row">
-          <span>DEPTH</span>
-          <input type="range" id="paperDepth" min="0" max="100" value="45" title="Texture visibility">
-          <span class="val" id="paperDepthVal">45</span>
-        </div>
-      </div>
+
       <div class="tool-row" id="toleranceRow" style="display:flex;gap:10px;flex-wrap:wrap;">
         <div class="range-row">
           <span>TOLERANCE</span>
@@ -820,6 +805,19 @@
         <button class="tool-btn" id="undoBtn" title="Ctrl+Z">↶ UNDO</button>
         <button class="tool-btn" id="redoBtn" title="Ctrl+Shift+Z">↷ REDO</button>
         <button class="tool-btn tool-clear-btn" id="clearDrawBtn">RESET</button>
+      </div>
+      <div class="tool-row" id="paperRow" style="display:none;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px;">
+        <span class="tex-label" title="MASTER only — display-only paper texture, never baked into objects or exports">PAPER</span>
+        <div class="tex-group">
+          <button class="paper-btn active" data-paper="none" title="Plain surface">NONE</button>
+          <button class="paper-btn" data-paper="custom" id="paperUploadBtn" title="Upload your own texture image">⬆ UPLOAD</button>
+        </div>
+        <input type="file" id="paperFile" accept="image/*" style="display:none;">
+        <div class="range-row">
+          <span>DEPTH</span>
+          <input type="range" id="paperDepth" min="0" max="100" value="45" title="Texture visibility">
+          <span class="val" id="paperDepthVal">45</span>
+        </div>
       </div>
       <button class="btn btn-accent btn-full" id="registerBtn" style="margin-top:6px;">REGISTER OBJECT →</button>
       <div class="replay-row">
@@ -1823,6 +1821,8 @@ showLayerMenu(ev.clientX, ev.clientY, [
       paperKind = saved.k;
       paperDepth = saved.d|0;
       if(typeof saved.img === 'string') paperCustomSrc = saved.img;
+      // procedural presets were removed from the UI — map old saves to NONE
+      if(paperKind !== 'none' && paperKind !== 'custom') paperKind = 'none';
     }
   } catch(e){}
   applyPaper();
