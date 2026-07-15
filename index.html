@@ -747,6 +747,11 @@
         </div>
         <div class="layer-list" id="layerList"></div>
         <button class="btn btn-sm" id="layerRecolorBtn" title="Recolor everything on the active layer with the selected color">◉ RECOLOR LAYER</button>
+        <div class="range-row" id="layerWidthRow" title="Scale the line thickness of every stroke on the ACTIVE layer (live)">
+          <span>LINE WIDTH</span>
+          <input type="range" id="layerWidthSlider" min="20" max="300" value="100">
+          <span class="val" id="layerWidthVal">100%</span>
+        </div>
       </div>
         </aside>
 
@@ -767,6 +772,8 @@
         <div id="traceSelectBox"></div>
         <canvas id="drawCanvas" width="1080" height="1080"></canvas>
         <div id="canvasCursor"></div>
+        <canvas id="lassoOverlay" width="1080" height="1080"
+                style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none;"></canvas>
         </div>
         <div id="traceControls">
           <div class="tc-title">REFERENCE — ADJUST</div>
@@ -785,6 +792,7 @@
         <button class="tool-btn" data-tool="fill" title="Hotkey: G — fills a region and auto-splits it into a new layer">FILL</button>
         <button class="tool-btn" data-tool="select" title="Hotkey: V — drag on canvas to move the ACTIVE layer">SELECT</button>
         <button class="tool-btn" data-tool="eraser" title="Hotkey: E — erases on the ACTIVE layer only">ERASER</button>
+        <button class="tool-btn" data-tool="lasso" title="Hotkey: L — draw a selection, then press Delete to remove it from the ACTIVE layer">LASSO</button>
         <button class="tool-btn" id="eyedropperBtn" title="Hotkey: I — click the canvas once to pick a color">EYEDROPPER</button>
       </div>
       <div class="history-select" style="display:flex; gap:6px; margin-top:-4px;">
@@ -1623,6 +1631,218 @@ showLayerMenu(ev.clientX, ev.clientY, [
     toast(l.name + ' added.');
   });
 
+  // ==================== LASSO (Photoshop-style select + Delete) ====================
+  // Freehand selection; pressing Delete removes everything inside it on the
+  // ACTIVE layer. The deletion is baked straight into the geometry (strokes
+  // are split, fill masks are punched, images get a hole), so recipes, SVG
+  // export, variations and autosave all stay correct with NO new replay
+  // action type. Undo restores the exact pre-delete state from a snapshot.
+  let lassoDrawing = null;   // points while dragging
+  let lassoSelection = null; // committed closed polygon
+
+  function clearLasso(){
+    lassoDrawing = null;
+    lassoSelection = null;
+    const oc = $('lassoOverlay');
+    if(oc) oc.getContext('2d').clearRect(0, 0, oc.width, oc.height);
+  }
+
+  function drawLassoOverlay(pts, closed){
+    const oc = $('lassoOverlay');
+    if(!oc || !pts || pts.length < 2) return;
+    const c = oc.getContext('2d');
+    c.clearRect(0, 0, oc.width, oc.height);
+    c.save();
+    c.lineWidth = 2;
+    c.setLineDash([7, 5]);
+    c.strokeStyle = '#1d1d1f';
+    c.beginPath();
+    c.moveTo(pts[0].x, pts[0].y);
+    for(let i=1; i<pts.length; i++) c.lineTo(pts[i].x, pts[i].y);
+    if(closed) c.closePath();
+    c.stroke();
+    c.setLineDash([7, 5]);
+    c.lineDashOffset = 6;
+    c.strokeStyle = '#ffffff';
+    c.stroke();
+    c.restore();
+  }
+
+  function pointInPolygon(px, py, poly){
+    let inside = false;
+    for(let i=0, j=poly.length-1; i<poly.length; j=i++){
+      const xi = poly[i].x, yi = poly[i].y, xj = poly[j].x, yj = poly[j].y;
+      if((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+
+  // Split a stroke into the segments OUTSIDE the polygon (densified so the
+  // cut lands between recorded points too). Returns null when untouched.
+  function splitStrokeByPolygon(a, poly){
+    let pts = a.points;
+    if(pts.length > 1){
+      const dense = [pts[0]];
+      for(let i=1; i<pts.length; i++){
+        const p0 = pts[i-1], p1 = pts[i];
+        const n = Math.floor(Math.hypot(p1.x-p0.x, p1.y-p0.y) / 6);
+        for(let k=1; k<=n; k++) dense.push({ x:p0.x+(p1.x-p0.x)*k/(n+1), y:p0.y+(p1.y-p0.y)*k/(n+1) });
+        dense.push(p1);
+      }
+      pts = dense;
+    }
+    const parts = [];
+    let seg = [], removed = false;
+    const flush = ()=>{ if(seg.length >= 2 || (seg.length === 1 && a.points.length === 1)) parts.push(seg); seg = []; };
+    for(const p of pts){
+      if(pointInPolygon(p.x, p.y, poly)){ removed = true; flush(); }
+      else seg.push(p);
+    }
+    flush();
+    return removed ? parts : null;
+  }
+
+  // Rasterize the polygon on a fill's mask grid and clear the covered cells.
+  // Returns 'empty' | modified copy | null (untouched).
+  function subtractPolygonFromFill(fa, poly){
+    const W = drawCanvas.width, H = drawCanvas.height;
+    const mw = fa.mw || W, mh = fa.mh || H;
+    const ox = Math.round(fa.ox || 0), oy = Math.round(fa.oy || 0);
+    const t = document.createElement('canvas');
+    t.width = mw; t.height = mh;
+    const tc = t.getContext('2d', { willReadFrequently: true });
+    tc.save();
+    tc.translate(-ox, -oy); // canvas coords → mask grid
+    tc.beginPath();
+    tc.moveTo(poly[0].x, poly[0].y);
+    for(let i=1; i<poly.length; i++) tc.lineTo(poly[i].x, poly[i].y);
+    tc.closePath();
+    tc.fill();
+    tc.restore();
+    const d = tc.getImageData(0, 0, mw, mh).data;
+    const mask = decodeMask(fa.m, mw*mh);
+    let changed = false, remain = 0;
+    for(let vi=0; vi<mw*mh; vi++){
+      if(!mask[vi]) continue;
+      if(d[vi*4+3] > 128){ mask[vi] = 0; changed = true; }
+      else remain++;
+    }
+    if(!changed) return null;
+    if(remain === 0) return 'empty';
+    return { ...fa, id: ++actionCounter, m: encodeMask(mask) };
+  }
+
+  function punchImageByPolygon(im, poly){
+    // any polygon vertex or image corner overlap? quick bbox test first
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    for(const p of poly){ minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x); minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y); }
+    if(maxX < im.x || minX > im.x+im.w || maxY < im.y || minY > im.y+im.h) return null;
+    try {
+      const t = document.createElement('canvas');
+      t.width = Math.max(1, Math.round(im.w));
+      t.height = Math.max(1, Math.round(im.h));
+      const tc = t.getContext('2d');
+      tc.drawImage(im.img, 0, 0, t.width, t.height);
+      tc.save();
+      tc.globalCompositeOperation = 'destination-out';
+      tc.scale(t.width / im.w, t.height / im.h);
+      tc.translate(-im.x, -im.y);
+      tc.beginPath();
+      tc.moveTo(poly[0].x, poly[0].y);
+      for(let i=1; i<poly.length; i++) tc.lineTo(poly[i].x, poly[i].y);
+      tc.closePath();
+      tc.fill();
+      tc.restore();
+      return { ...im, id: ++actionCounter, img: t };
+    } catch(err){ return null; }
+  }
+
+  function lassoDeleteOnActiveLayer(){
+    if(replaying){ toast('Replaying — please wait.'); return; }
+    if(!lassoSelection || lassoSelection.length < 3) return;
+    const al = activeLayer();
+    const poly = lassoSelection;
+    const prevOrder = actions.slice();
+    let touched = false;
+    const next = [];
+    for(const a of actions){
+      const mine = a.layer === al.id;
+      if(!mine){ next.push(a); continue; }
+      if(a.type === 'stroke' && a.tool !== 'eraser'){
+        const parts = splitStrokeByPolygon(a, poly);
+        if(parts === null){ next.push(a); continue; }
+        touched = true;
+        for(const seg of parts) next.push({ ...a, id: ++actionCounter, points: seg });
+      } else if(a.type === 'fill' && a.m){
+        const res = subtractPolygonFromFill(a, poly);
+        if(res === null){ next.push(a); }
+        else if(res === 'empty'){ touched = true; }
+        else { touched = true; next.push(res); }
+      } else if(a.type === 'image' && a.img){
+        const res = punchImageByPolygon(a, poly);
+        if(res){ touched = true; next.push(res); } else next.push(a);
+      } else {
+        next.push(a);
+      }
+    }
+    if(!touched){ toast('Nothing inside the selection on this layer.'); clearLasso(); return; }
+    actions.length = 0;
+    actions.push(...next);
+    const nextOrder = actions.slice();
+    actions.push({ type:'lassoDelete', id: ++actionCounter, prevOrder, nextOrder, layerName: al.name });
+    redoStack.length = 0;
+    clearLasso();
+    clearStrokeSelection();
+    renderAll();
+    toast(`Selection deleted from ${al.name} (Ctrl+Z to undo).`);
+  }
+
+  // ---- Per-layer LINE WIDTH: drag to scale all strokes on the active
+  // layer in real time; releasing commits one undoable history entry. ----
+  let layerWidthSession = null; // { layerId, items:[{a, base}] }
+  let _lwRaf = false;
+  function renderAllThrottled(){
+    if(_lwRaf) return;
+    _lwRaf = true;
+    requestAnimationFrame(()=>{ _lwRaf = false; renderAll(); });
+  }
+  $('layerWidthSlider').addEventListener('input', e=>{
+    if(replaying) return;
+    if(!layerWidthSession || layerWidthSession.layerId !== activeLayerId){
+      const al = activeLayer();
+      const items = actions
+        .filter(a => a.type === 'stroke' && a.tool !== 'eraser' && a.layer === al.id)
+        .map(a => ({ a, base: a.width }));
+      layerWidthSession = { layerId: al.id, items };
+    }
+    const f = parseInt(e.target.value, 10) / 100;
+    $('layerWidthVal').textContent = Math.round(f*100) + '%';
+    if(!layerWidthSession.items.length) return;
+    layerWidthSession.items.forEach(it => { it.a.width = Math.max(0.5, it.base * f); });
+    renderAllThrottled();
+  });
+  $('layerWidthSlider').addEventListener('change', e=>{
+    // Read the final factor FIRST — e.target IS the slider, so resetting it
+    // before reading made f always 1 and reverted the widths on release.
+    const f = parseInt(e.target.value, 10) / 100;
+    const sess = layerWidthSession;
+    layerWidthSession = null;
+    $('layerWidthSlider').value = 100;
+    $('layerWidthVal').textContent = '100%';
+    if(!sess || !sess.items.length) return;
+    if(Math.abs(f - 1) < 0.005){ // released back at 100% → nothing changed
+      sess.items.forEach(it => { it.a.width = it.base; });
+      renderAll();
+      return;
+    }
+    actions.push({
+      type: 'layerWidth', id: ++actionCounter, layer: sess.layerId,
+      items: sess.items.map(it => ({ a: it.a, prev: it.base, next: it.a.width }))
+    });
+    redoStack.length = 0;
+    toast(`Line width ×${f.toFixed(2)} applied (Ctrl+Z to undo).`);
+  });
+
   $('layerDelBtn').addEventListener('click', ()=>{
     if(layers.length <= 1){ toast('At least one layer is required.'); return; }
     const al = activeLayer();
@@ -1859,6 +2079,12 @@ showLayerMenu(ev.clientX, ev.clientY, [
       if(k === 'g') { document.querySelector('[data-tool="fill"]').click(); }
       if(k === 'v') { document.querySelector('[data-tool="select"]').click(); }
       if(k === 'e') { document.querySelector('[data-tool="eraser"]').click(); }
+      if(k === 'l') { document.querySelector('[data-tool="lasso"]').click(); }
+      if((e.key === 'Delete' || e.key === 'Backspace') && lassoSelection){
+        e.preventDefault();
+        lassoDeleteOnActiveLayer();
+      }
+      if(e.key === 'Escape' && (lassoSelection || lassoDrawing)){ clearLasso(); }
       if(k === 'r' && !e.repeat){ rotateKeyHeld = true; updateCursorState(); }
       if(e.key === ' '){ if(!e.repeat){ spaceKeyHeld = true; updateCursorState(); } e.preventDefault(); }
       if(k === 'i') { e.preventDefault(); activateEyedropper(); }
@@ -3742,7 +3968,13 @@ showLayerMenu(ev.clientX, ev.clientY, [
       tc.fillStyle = drawColor;
       const rnd = mulberry32(sd);
       const step = Math.max(1, width * 0.35);
-      const density = 2 + g * 10; // dots per step
+      const density = 2 + g * 10; // dots per step at the reference width
+      // Dots were constant per step while the scatter DISC area grows with
+      // width² and steps get sparser with width \u2014 so perceived density fell
+      // off quadratically as lines got thicker. Scale the dot count by
+      // (width/8)² (8 = default brush size) to keep dots-per-area constant;
+      // thin strokes keep their original look via the clamp.
+      const densityScale = Math.max(1, Math.pow(width / 8, 2));
       const one = pts.length === 1 ? [pts[0], pts[0]] : pts;
       for(let i=1; i<one.length; i++){
         const a0 = one[i-1], b0 = one[i];
@@ -3751,7 +3983,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
         for(let k=0; k<n; k++){
           const tt = k / n;
           const cx2 = a0.x + (b0.x-a0.x)*tt, cy2 = a0.y + (b0.y-a0.y)*tt;
-          const dots = density * (0.5 + rnd());
+          const dots = density * (0.5 + rnd()) * densityScale;
           for(let dcount=0; dcount<dots; dcount++){
             const ang = rnd() * Math.PI * 2;
             const rad = Math.sqrt(rnd()) * width * 0.5;
@@ -3917,6 +4149,14 @@ showLayerMenu(ev.clientX, ev.clientY, [
         if(typeof syncLiveEdit === 'function') syncLiveEdit(true); // live link: fill → composition + gallery now
         toast(`Fill split to new layer: ${fl.name}.`);
       }, 10);
+      return;
+    }
+
+    if(currentTool === 'lasso'){
+      lassoSelection = null;
+      lassoDrawing = [p];
+      drawLassoOverlay(lassoDrawing, false);
+      try { drawCanvas.setPointerCapture(e.pointerId); } catch(err){}
       return;
     }
 
@@ -4319,6 +4559,15 @@ showLayerMenu(ev.clientX, ev.clientY, [
       applyViewTransform();
       return;
     }
+    if(lassoDrawing){
+      const p = getPos(e);
+      const last = lassoDrawing[lassoDrawing.length-1];
+      if(Math.hypot(p.x-last.x, p.y-last.y) > 2){
+        lassoDrawing.push(p);
+        drawLassoOverlay(lassoDrawing, false);
+      }
+      return;
+    }
     if(movingLayer){
       const p = getPos(e);
       movingLayer.dx = p.x - movingLayer.startX;
@@ -4349,6 +4598,17 @@ showLayerMenu(ev.clientX, ev.clientY, [
 
   function endStroke(){
     if(viewDrag){ viewDrag = null; updateCursorState(); return; }
+    if(lassoDrawing){
+      if(lassoDrawing.length >= 3){
+        lassoSelection = lassoDrawing;
+        drawLassoOverlay(lassoSelection, true);
+        toast('Selection ready — press Delete to remove it from the active layer.');
+      } else {
+        clearLasso();
+      }
+      lassoDrawing = null;
+      return;
+    }
     if(movingLayer){
       const mv = movingLayer; movingLayer = null;
       const dx = Math.round(mv.dx), dy = Math.round(mv.dy);
@@ -4412,6 +4672,23 @@ showLayerMenu(ev.clientX, ev.clientY, [
       clearStrokeSelection();
       renderAll();
       toast('Layer texture undone.');
+      return;
+    }
+    // Lasso delete → restore the exact pre-delete action list.
+    if(undoneAction.type === 'lassoDelete'){
+      actions.length = 0;
+      actions.push(...undoneAction.prevOrder);
+      clearStrokeSelection();
+      renderAll();
+      toast('Lasso delete undone.');
+      return;
+    }
+    // Per-layer line width → restore original stroke widths.
+    if(undoneAction.type === 'layerWidth'){
+      undoneAction.items.forEach(it => { it.a.width = it.prev; });
+      clearStrokeSelection();
+      renderAll();
+      toast('Line width change undone.');
       return;
     }
     // Layer delete → put the layer and its actions back exactly.
@@ -4479,6 +4756,23 @@ showLayerMenu(ev.clientX, ev.clientY, [
       return;
     }
     const redoneAction = redoStack.pop();
+    if(redoneAction.type === 'lassoDelete'){
+      actions.length = 0;
+      actions.push(...redoneAction.nextOrder);
+      actions.push(redoneAction);
+      clearStrokeSelection();
+      renderAll();
+      toast('Lasso delete redone.');
+      return;
+    }
+    if(redoneAction.type === 'layerWidth'){
+      redoneAction.items.forEach(it => { it.a.width = it.next; });
+      actions.push(redoneAction);
+      clearStrokeSelection();
+      renderAll();
+      toast('Line width change redone.');
+      return;
+    }
     if(redoneAction.type === 'layerDelete'){
       const lid = redoneAction.layerObj.id;
       for(let i=actions.length-1; i>=0; i--){ if(actions[i].layer===lid) actions.splice(i,1); }
@@ -4558,6 +4852,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
       document.querySelectorAll('.tool-select .tool-btn:not(.tool-clear-btn):not(#eyedropperBtn)').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       currentTool = btn.dataset.tool;
+      if(currentTool !== 'lasso') clearLasso();
       // STROKE and ERASER keep independent sizes — swap on tool change.
       brushSize = toolSizes[currentTool === 'eraser' ? 'eraser' : 'brush'];
       $('brushSize').value = brushSize;
