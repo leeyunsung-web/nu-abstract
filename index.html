@@ -621,15 +621,12 @@
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
     <h1 class="login-logo">NU-LAYER</h1>
-    <div class="login-choices">
-      <button class="login-choice" id="chooseGuest">Guest</button>
-      <button class="login-choice master-choice" id="chooseMaster">Master</button>
-    </div>
-    <div class="login-pass" id="loginPass">
+    <p style="font-family:var(--font-mono);font-size:11px;color:var(--ink-dim);margin:-6px 0 14px;">SWITCH TO MASTER</p>
+    <div class="login-pass show" id="loginPass">
       <input type="password" id="masterPass" maxlength="4" inputmode="numeric" placeholder="••••" autocomplete="off">
       <div class="pass-err" id="passErr"></div>
       <div class="pass-btns">
-        <button class="btn btn-ghost" id="passBack">BACK</button>
+        <button class="btn btn-ghost" id="passBack">CANCEL</button>
         <button class="btn btn-accent" id="passEnter">ENTER</button>
       </div>
     </div>
@@ -1063,6 +1060,8 @@
     chip.classList.toggle('master', isMaster);
     $('roleBadge').textContent = isMaster ? 'MASTER' : 'GUEST';
     $('roleName').textContent = isMaster ? 'Master' : 'Guest';
+    const sw = $('switchRoleBtn');
+    if(sw) sw.textContent = isMaster ? '⇄ GUEST' : '⇄ MASTER';
     $('openMgrBtn').style.display = isMaster ? 'inline-flex' : 'none';
     // GitHub repo config chip: master only (hidden entirely for guests)
     const ghChip = $('ghChip');
@@ -1079,33 +1078,20 @@
     if(typeof applyPaper === 'function') applyPaper();
   }
 
-  function showLogin(){
-    $('loginPass').classList.remove('show');
+  function showMasterSwitch(){
     $('masterPass').value = '';
     $('passErr').textContent = '';
     $('loginOverlay').classList.add('show');
+    setTimeout(()=> $('masterPass').focus(), 60);
   }
   function hideLogin(){ $('loginOverlay').classList.remove('show'); }
 
-  $('chooseGuest').addEventListener('click', ()=>{
-    setRole('guest');
-    hideLogin();
-    toast('Entered as Guest.');
-  });
-  $('chooseMaster').addEventListener('click', ()=>{
-    $('loginPass').classList.add('show');
-    setTimeout(()=> $('masterPass').focus(), 60);
-  });
-  $('passBack').addEventListener('click', ()=>{
-    $('loginPass').classList.remove('show');
-    $('masterPass').value = '';
-    $('passErr').textContent = '';
-  });
+  $('passBack').addEventListener('click', hideLogin);
   function tryMasterPass(){
     if($('masterPass').value === MASTER_PASSWORD){
       setRole('master');
       hideLogin();
-      toast('Entered as Master.');
+      toast('Switched to Master.');
     } else {
       $('passErr').textContent = 'Incorrect password.';
       $('masterPass').value = '';
@@ -1113,14 +1099,24 @@
     }
   }
   $('passEnter').addEventListener('click', tryMasterPass);
-  $('masterPass').addEventListener('keydown', e=>{ if(e.key==='Enter') tryMasterPass(); });
-  $('switchRoleBtn').addEventListener('click', showLogin);
+  $('masterPass').addEventListener('keydown', e=>{
+    if(e.key === 'Enter') tryMasterPass();
+    if(e.key === 'Escape') hideLogin();
+  });
+  // SWITCH toggles the role: guest → password prompt, master → back to guest.
+  $('switchRoleBtn').addEventListener('click', ()=>{
+    if(userRole === 'master'){
+      setRole('guest');
+      toast('Switched to Guest.');
+    } else {
+      showMasterSwitch();
+    }
+  });
 
-  // Initialize: always show login on load (choice each session)
+  // Initialize: ALWAYS enter as guest — no login popup. Master is one
+  // SWITCH-button + password away.
   (function initRole(){
-    const saved = localStorage.getItem(ROLE_KEY);
-    applyRole(saved === 'master' ? 'master' : 'guest');
-    showLogin();
+    applyRole('guest');
   })();
 
   // ==================== LAYER PANEL ====================
