@@ -431,8 +431,16 @@
       el.style.height = size + 'px';
       
       const im = document.createElement('img');
+      // crossOrigin lets us read pixels for shape-accurate hit-testing
+      // (GitHub raw/API URLs serve CORS headers). If it fails we retry
+      // without it and fall back to box hits for that item.
+      im.crossOrigin = 'anonymous';
       im.src = img.downloadUrl;
       im.loading = 'lazy';
+      im.addEventListener('load', ()=> buildHitMap(obj, im));
+      im.addEventListener('error', ()=>{
+        if(im.crossOrigin !== null){ im.crossOrigin = null; im.src = img.downloadUrl; }
+      }, { once:true });
       el.appendChild(im);
       stage.appendChild(el);
 
@@ -441,19 +449,26 @@
       // Mouse/Touch Interaction
       el.addEventListener('pointerdown', (e) => {
         if(e.button !== 0 && e.pointerType === 'mouse') return; // Left click only
+        // Shape-accurate: transparent pixels of THIS item don't grab it —
+        // the click goes to whatever artwork is actually under the pointer.
+        let target = obj;
+        if(!hitTestObj(obj, e.clientX, e.clientY)){
+          target = topmostShapeHit(e.clientX, e.clientY, obj);
+          if(!target){ closeMenu(); return; } // empty air = background click
+        }
         e.preventDefault();
-        selectItem(obj);
+        selectItem(target);
         
         let startX = e.clientX;
         let startY = e.clientY;
-        let initX = obj.x;
-        let initY = obj.y;
+        let initX = target.x;
+        let initY = target.y;
 
         function onMove(me){
-          obj.x = initX + (me.clientX - startX);
-          obj.y = initY + (me.clientY - startY);
-          updateTransform(obj);
-          positionMenu(obj);
+          target.x = initX + (me.clientX - startX);
+          target.y = initY + (me.clientY - startY);
+          updateTransform(target);
+          positionMenu(target);
         }
         function onUp(){
           window.removeEventListener('pointermove', onMove);
@@ -464,6 +479,66 @@
       });
     });
     applyAA(currentAA());
+  }
+
+  // ---------- shape-accurate selection ----------
+  // Each item keeps a small alpha map of its PNG; clicks landing on
+  // transparent pixels don't grab the item — they fall through to the
+  // topmost item whose actual artwork is under the pointer.
+  function buildHitMap(obj, im){
+    try {
+      const nw = im.naturalWidth, nh = im.naturalHeight;
+      if(!nw || !nh) return;
+      const cap = 256;
+      const k = Math.min(1, cap / Math.max(nw, nh));
+      const w = Math.max(1, Math.round(nw * k));
+      const h = Math.max(1, Math.round(nh * k));
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const cx = c.getContext('2d', { willReadFrequently: true });
+      cx.drawImage(im, 0, 0, w, h);
+      const data = cx.getImageData(0, 0, w, h).data; // throws if tainted
+      obj.hit = { data, w, h, nw, nh, ready: true };
+    } catch(err){
+      obj.hit = null; // tainted or unreadable → box hit fallback
+    }
+  }
+
+  function hitTestObj(obj, clientX, clientY){
+    // Invert the item's transform (translate → rotate → scale, origin center).
+    const r = obj.el.getBoundingClientRect();
+    if(!r.width || !r.height) return false;
+    const vx = clientX - (r.left + r.width/2);
+    const vy = clientY - (r.top + r.height/2);
+    const rad = -obj.rotate * Math.PI / 180;
+    const ux = vx*Math.cos(rad) - vy*Math.sin(rad);
+    const uy = vx*Math.sin(rad) + vy*Math.cos(rad);
+    const lx = ux/obj.scale + obj.width/2;
+    const ly = uy/obj.scale + obj.height/2;
+    if(lx < 0 || ly < 0 || lx >= obj.width || ly >= obj.height) return false;
+    const hm = obj.hit;
+    if(!hm || !hm.ready) return true; // no pixel data → whole box counts
+    // object-fit: contain — image is aspect-fit, centered in the box
+    const arImg = hm.nw / hm.nh, arBox = obj.width / obj.height;
+    let dw, dh;
+    if(arImg > arBox){ dw = obj.width; dh = obj.width / arImg; }
+    else { dh = obj.height; dw = obj.height * arImg; }
+    const ix = (lx - (obj.width  - dw)/2) / dw;
+    const iy = (ly - (obj.height - dh)/2) / dh;
+    if(ix < 0 || ix >= 1 || iy < 0 || iy >= 1) return false;
+    const px = Math.floor(ix * hm.w), py = Math.floor(iy * hm.h);
+    return hm.data[(py*hm.w + px)*4 + 3] > 12;
+  }
+
+  function topmostShapeHit(clientX, clientY, excludeObj){
+    let best = null, bestZ = -Infinity;
+    for(const o of itemsData){
+      if(o === excludeObj) continue;
+      const z = parseInt(o.el.style.zIndex, 10) || 5;
+      if(z <= bestZ) continue;
+      if(hitTestObj(o, clientX, clientY)){ best = o; bestZ = z; }
+    }
+    return best;
   }
 
   function updateTransform(obj){

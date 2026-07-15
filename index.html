@@ -3677,6 +3677,95 @@
     // layerRecolor & markers: no coordinates to shift
   }
 
+  // ==================== ERASER BAKING (final-image geometry) ====================
+  // Rewrites a list of actions so strokes carry only the segments that
+  // SURVIVE the eraser strokes recorded after them on the same layer, then
+  // drops the consumed erasers. Loaded drawings and variations therefore
+  // contain only the FINAL visible lines — textures (pencil/spray) can never
+  // resurrect erased marks, and the data is one step from clean SVG paths.
+  // keyOf: returns the layer grouping key for an action (a.layer or a.li).
+  function bakeErasers(list, keyOf){
+    const isEraser = a => a.type === 'stroke' && a.tool === 'eraser';
+    const eInfo = list.map(a => {
+      if(!isEraser(a) || !a.points || !a.points.length) return null;
+      let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+      for(const p of a.points){
+        if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x;
+        if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y;
+      }
+      return { r: (a.width||1)/2, minX, minY, maxX, maxY };
+    });
+    const dist2 = (px,py, ax,ay, bx,by) => {
+      const dx=bx-ax, dy=by-ay, len2=dx*dx+dy*dy;
+      let t = len2 ? ((px-ax)*dx + (py-ay)*dy) / len2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      const qx = ax+dx*t-px, qy = ay+dy*t-py;
+      return qx*qx + qy*qy;
+    };
+    const erasedAt = (p, idx, key) => {
+      for(let j=idx+1; j<list.length; j++){
+        const e = list[j];
+        if(!isEraser(e) || keyOf(e) !== key) continue;
+        const info = eInfo[j];
+        if(!info) continue;
+        const r = info.r;
+        if(p.x < info.minX-r || p.x > info.maxX+r || p.y < info.minY-r || p.y > info.maxY+r) continue;
+        const pts = e.points;
+        if(pts.length === 1){
+          if(dist2(p.x,p.y, pts[0].x,pts[0].y, pts[0].x,pts[0].y) <= r*r) return true;
+          continue;
+        }
+        for(let k=0; k<pts.length-1; k++){
+          if(dist2(p.x,p.y, pts[k].x,pts[k].y, pts[k+1].x,pts[k+1].y) <= r*r) return true;
+        }
+      }
+      return false;
+    };
+    // Layers that also hold fills/images: their erasers carved that paint
+    // too, so those erasers must stay (strokes still get trimmed).
+    const paintKeys = new Set();
+    for(const a of list){ if(a.type === 'fill' || a.type === 'image') paintKeys.add(keyOf(a)); }
+
+    const out = [];
+    list.forEach((a, idx) => {
+      const key = keyOf(a);
+      if(isEraser(a)){
+        if(paintKeys.has(key)) out.push(a);
+        return; // consumed by trimming
+      }
+      if(a.type !== 'stroke' || !a.points || !a.points.length){ out.push(a); return; }
+      // Densify: recorded points can be sparse (long straight segments);
+      // insert intermediate test points so an eraser crossing BETWEEN two
+      // recorded points still splits the path there.
+      let pts = a.points;
+      if(pts.length > 1){
+        const dense = [pts[0]];
+        for(let i=1; i<pts.length; i++){
+          const p0 = pts[i-1], p1 = pts[i];
+          const n = Math.floor(Math.hypot(p1.x-p0.x, p1.y-p0.y) / 6);
+          for(let k=1; k<=n; k++){
+            dense.push({ x: p0.x + (p1.x-p0.x)*k/(n+1), y: p0.y + (p1.y-p0.y)*k/(n+1) });
+          }
+          dense.push(p1);
+        }
+        pts = dense;
+      }
+      let seg = [];
+      const flush = () => {
+        if(seg.length >= 2 || (seg.length === 1 && a.points.length === 1)){
+          out.push({ ...a, points: seg });
+        }
+        seg = [];
+      };
+      for(const p of pts){
+        if(erasedAt(p, idx, key)) flush();
+        else seg.push(p);
+      }
+      flush();
+    });
+    return out;
+  }
+
   drawCanvas.addEventListener('pointermove', e=>{
     updateCursorState(e);
     if(viewDrag){
@@ -4169,6 +4258,7 @@
         const maxLi = obj.recipe.reduce((m,a)=> Math.max(m, a.li || 0, ...(a.sli || [0])), 0);
         while(layers.length <= maxLi) layers.push(createLayer());
         const layerIdFor = a => layers[Math.min(a.li || 0, layers.length-1)].id;
+        const loadStart = actions.length; // bake erasers after the whole batch lands
         obj.recipe.forEach(a=>{
           if(a.type === 'stroke'){
             actions.push({
@@ -4194,6 +4284,15 @@
             actions.push({ type:'layerRecolor', id:++actionCounter, color:a.color, layer: layerIdFor(a) });
           }
         });
+        // FINAL-IMAGE geometry: fold the loaded erasers into the stroke
+        // paths (split strokes into surviving segments, drop the erasers).
+        // Textures applied later can then only ever touch visible lines.
+        {
+          const added = actions.splice(loadStart);
+          const baked = bakeErasers(added, a => a.layer);
+          baked.forEach(a => { a.id = ++actionCounter; });
+          actions.push(...baked);
+        }
         renderLayersPanel();
         redoStack.length = 0;
         clearStrokeSelection();
@@ -4360,6 +4459,8 @@
 
     // Use recipe if available to redraw cleanly
     if(obj.recipe && obj.recipe.length > 0) {
+      // Variations should texture and warp only the FINAL visible lines.
+      const bakedRecipe = bakeErasers(obj.recipe, a => a.li || 0);
       const centerX = size/2, centerY = size/2;
       const angle = rand(-10, 10) * Math.PI/180;
       const baseScale = rand(0.9, 1.1);
@@ -4377,7 +4478,7 @@
 
       const redrawnActions = [];
       const colorShift = randColorShift();
-      obj.recipe.forEach(a=>{
+      bakedRecipe.forEach(a=>{
         if(a.type === 'stroke'){
           let pts = a.points;
           let finalPts = pts.map(transformPt);
