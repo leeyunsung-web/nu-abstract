@@ -331,6 +331,18 @@
   });
 
   // Config logic
+  // Visitors arriving from the public link have no saved config — derive the
+  // repo from the GitHub Pages URL itself (owner.github.io/repo). Listing a
+  // public repo needs no token, so read-only browsing just works.
+  function defaultCfgFromLocation(){
+    if(typeof location === 'undefined') return null;
+    const h = location.hostname || '';
+    if(!/\.github\.io$/i.test(h)) return null;
+    const owner = h.split('.')[0];
+    const seg = location.pathname.split('/').filter(Boolean);
+    const repo = seg.length ? seg[0] : (owner + '.github.io');
+    return { owner, repo, branch: 'main', path: 'gallery' };
+  }
   function loadConfig(){
     let cfg = null;
     try { cfg = JSON.parse(localStorage.getItem(ARCHIVE_STORAGE_KEY)); } catch(e){}
@@ -341,6 +353,7 @@
         cfg = { owner: gh.owner, repo: gh.repo, path: gh.path || 'gallery', branch: gh.branch || 'main' };
       }
     }
+    if(!cfg || !cfg.owner || !cfg.repo) cfg = defaultCfgFromLocation();
     return cfg;
   }
   function saveConfig(cfg){

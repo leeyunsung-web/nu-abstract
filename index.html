@@ -931,7 +931,7 @@
         <div class="comp-btns">
           <button class="btn btn-accent" id="genCompBtn">GENERATE RANDOM ✦</button>
           <button class="btn" id="clearCompBtn">CLEAR</button>
-          <button class="btn btn-ghost" id="downloadCompBtn" title="Saves the full-size PNG to the GALLERY page (no local download)">SAVE PNG → GALLERY</button>
+          <button class="btn btn-ghost" id="downloadCompBtn">SAVE PNG</button>
         </div>
       </div>
     </section>
@@ -1068,6 +1068,7 @@
     if(ghChip) ghChip.style.display = isMaster ? 'flex' : 'none';
     document.body.classList.toggle('role-master', isMaster);
     document.body.classList.toggle('role-guest', !isMaster);
+    if(typeof updateCompSaveBtn === 'function') updateCompSaveBtn();
     // Refresh gallery so DEL buttons reflect permissions
     if(typeof renderGallery === 'function') renderGallery();
   }
@@ -2694,11 +2695,29 @@ showLayerMenu(ev.clientX, ev.clientY, [
   const GH_STORAGE_KEY = 'objet_studio_gh_config';
   let ghConfig = null;
 
+  // Visitors arriving from the public link have no saved config — derive the
+  // repo from the GitHub Pages URL itself (owner.github.io/repo). Listing a
+  // public repo needs no token, so read-only browsing just works.
+  function defaultCfgFromLocation(){
+    if(typeof location === 'undefined') return null;
+    const h = location.hostname || '';
+    if(!/\.github\.io$/i.test(h)) return null;
+    const owner = h.split('.')[0];
+    const seg = location.pathname.split('/').filter(Boolean);
+    const repo = seg.length ? seg[0] : (owner + '.github.io');
+    return { owner, repo, branch: 'main', path: 'gallery' };
+  }
   function loadGhConfig(){
     try {
       const raw = localStorage.getItem(GH_STORAGE_KEY);
       ghConfig = raw ? JSON.parse(raw) : null;
     } catch(e){ ghConfig = null; }
+    // Public-link visitors: read-only repo access derived from the URL
+    // (no token — uploads and deletes stay master-only).
+    if(!ghConfig || !ghConfig.owner || !ghConfig.repo){
+      const d = defaultCfgFromLocation();
+      if(d) ghConfig = Object.assign(d, ghConfig && ghConfig.token ? { token: ghConfig.token } : {});
+    }
     updateGhChip();
   }
   function saveGhConfig(cfg){
@@ -6432,7 +6451,31 @@ showLayerMenu(ev.clientX, ev.clientY, [
       toast('Gallery save failed: ' + (err.message || err));
     }
   }
-  $('downloadCompBtn').addEventListener('click', saveCompositionToGallery);
+  function downloadCompositionLocally(){
+    selectedItemIdx = null;
+    renderComposition();
+    const link = document.createElement('a');
+    link.download = `composition-${Date.now()}.png`;
+    link.href = compCanvas.toDataURL('image/png');
+    link.click();
+    toast('Saved to your device.');
+  }
+  // Master → upload to the shared gallery; guest → offline download.
+  function updateCompSaveBtn(){
+    const b = $('downloadCompBtn');
+    if(!b) return;
+    if(userRole === 'master'){
+      b.textContent = 'SAVE TO GALLERY';
+      b.title = 'Upload the full-size PNG to the shared GALLERY page';
+    } else {
+      b.textContent = 'SAVE PNG';
+      b.title = 'Download the full-size PNG to your device';
+    }
+  }
+  $('downloadCompBtn').addEventListener('click', ()=>{
+    if(userRole === 'master') saveCompositionToGallery();
+    else downloadCompositionLocally();
+  });
 
   paintCompBg();
   updateStat();

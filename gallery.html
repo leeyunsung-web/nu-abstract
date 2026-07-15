@@ -106,11 +106,24 @@
   const GH_STORAGE_KEY = 'objet_studio_gh_config';
   const FOLDER = 'compositions';
 
+  // Visitors arriving from the public link have no saved config — derive the
+  // repo from the GitHub Pages URL itself (owner.github.io/repo). Listing a
+  // public repo needs no token, so read-only browsing just works.
+  function defaultCfgFromLocation(){
+    if(typeof location === 'undefined') return null;
+    const h = location.hostname || '';
+    if(!/\.github\.io$/i.test(h)) return null;
+    const owner = h.split('.')[0];
+    const seg = location.pathname.split('/').filter(Boolean);
+    const repo = seg.length ? seg[0] : (owner + '.github.io');
+    return { owner, repo, branch: 'main', path: 'gallery' };
+  }
   function loadGh(){
     try { return JSON.parse(localStorage.getItem(GH_STORAGE_KEY)) || null; } catch(e){ return null; }
   }
-  const gh = loadGh();
-  const token = gh && gh.token ? gh.token : null;
+  const stored = loadGh();
+  const gh = (stored && stored.owner && stored.repo) ? stored : defaultCfgFromLocation();
+  const token = stored && stored.token ? stored.token : null;
   const ROLE_KEY = 'nulayer_role';
   function roleIsMaster(){
     try { return localStorage.getItem(ROLE_KEY) === 'master'; } catch(e){ return false; }
