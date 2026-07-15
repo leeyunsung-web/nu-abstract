@@ -747,10 +747,10 @@
         </div>
         <div class="layer-list" id="layerList"></div>
         <button class="btn btn-sm" id="layerRecolorBtn" title="Recolor everything on the active layer with the selected color">◉ RECOLOR LAYER</button>
-        <div class="range-row" id="layerWidthRow" title="Scale the line thickness of every stroke on the ACTIVE layer (live)">
+        <div class="range-row" id="layerWidthRow" title="Set the line thickness (px) of every stroke on the ACTIVE layer (live)">
           <span>LINE WIDTH</span>
-          <input type="range" id="layerWidthSlider" min="20" max="300" value="100">
-          <span class="val" id="layerWidthVal">100%</span>
+          <input type="range" id="layerWidthSlider" min="1" max="60" value="8">
+          <span class="val" id="layerWidthVal">8</span>
         </div>
       </div>
         </aside>
@@ -1267,6 +1267,7 @@
   function renderLayersPanel(){
     normalizeFolders();
     selectedLayerIds = new Set([...selectedLayerIds].filter(id => layers.some(l=>l.id===id)));
+    if(typeof syncLayerWidthSlider === 'function') syncLayerWidthSlider();
     const list = $('layerList');
     list.innerHTML = '';
 
@@ -1797,50 +1798,90 @@ showLayerMenu(ev.clientX, ev.clientY, [
     toast(`Selection deleted from ${al.name} (Ctrl+Z to undo).`);
   }
 
-  // ---- Per-layer LINE WIDTH: drag to scale all strokes on the active
-  // layer in real time; releasing commits one undoable history entry. ----
-  let layerWidthSession = null; // { layerId, items:[{a, base}] }
+  // ---- Per-layer LINE WIDTH: sets the thickness of every stroke on the
+  // active layer to an ABSOLUTE pixel value, live. Absolute assignment is
+  // idempotent, so the stray `change` events tablets fire mid-drag can no
+  // longer compound the value or snap the slider back (the old percentage
+  // design multiplied on every commit and reset to 100%, which is exactly
+  // what caused the "bounces back and grows/shrinks forever" behaviour). ----
+  let layerWidthSession = null; // { layerId, items:[{a, prev}] }
   let _lwRaf = false;
-  function renderAllThrottled(){
+
+  // Live preview must be CHEAP: only the edited layer changes, so rebuild
+  // just that layer and recomposite.
+  function renderSingleLayer(layerId){
+    const l = layerById(layerId);
+    if(!l) return;
+    l.ctx.clearRect(0, 0, l.canvas.width, l.canvas.height);
+    for(const a of actions){
+      if(a.layer !== layerId) continue;
+      try {
+        if(a.type === 'stroke') renderStrokeFull(l.ctx, a);
+        else if(a.type === 'fill'){
+          if(a.m || a.src) replaySplitFill(a);
+          else floodFillApply(l.ctx, a.x, a.y, a.color, a.tolerance);
+        }
+        else if(a.type === 'layerRecolor') applyLayerRecolor(l.ctx, a.color);
+        else if(a.type === 'image' && a.img && a.w > 0 && a.h > 0){
+          l.ctx.drawImage(a.img, a.x, a.y, a.w, a.h);
+        }
+      } catch(err){ console.error('renderSingleLayer: skipped an action', err, a); }
+    }
+    compositeLayers();
+  }
+
+  function renderWidthPreviewThrottled(layerId){
     if(_lwRaf) return;
     _lwRaf = true;
-    requestAnimationFrame(()=>{ _lwRaf = false; renderAll(); });
+    requestAnimationFrame(()=>{ _lwRaf = false; renderSingleLayer(layerId); });
   }
+
+  // Show the active layer's current line width on the slider (skipped while
+  // the user is dragging it).
+  function syncLayerWidthSlider(){
+    if(layerWidthSession) return;
+    const al = layers.find(l=>l.id===activeLayerId);
+    if(!al) return;
+    const st = actions.find(a=>a.type==='stroke' && a.tool!=='eraser' && a.layer===al.id);
+    const v = st ? Math.round(st.width) : brushSize;
+    $('layerWidthSlider').value = Math.max(1, Math.min(60, v));
+    $('layerWidthVal').textContent = v;
+  }
+
   $('layerWidthSlider').addEventListener('input', e=>{
     if(replaying) return;
     if(!layerWidthSession || layerWidthSession.layerId !== activeLayerId){
       const al = activeLayer();
       const items = actions
         .filter(a => a.type === 'stroke' && a.tool !== 'eraser' && a.layer === al.id)
-        .map(a => ({ a, base: a.width }));
+        .map(a => ({ a, prev: a.width }));
       layerWidthSession = { layerId: al.id, items };
     }
-    const f = parseInt(e.target.value, 10) / 100;
-    $('layerWidthVal').textContent = Math.round(f*100) + '%';
-    if(!layerWidthSession.items.length) return;
-    layerWidthSession.items.forEach(it => { it.a.width = Math.max(0.5, it.base * f); });
-    renderAllThrottled();
-  });
-  $('layerWidthSlider').addEventListener('change', e=>{
-    // Read the final factor FIRST — e.target IS the slider, so resetting it
-    // before reading made f always 1 and reverted the widths on release.
-    const f = parseInt(e.target.value, 10) / 100;
-    const sess = layerWidthSession;
-    layerWidthSession = null;
-    $('layerWidthSlider').value = 100;
-    $('layerWidthVal').textContent = '100%';
-    if(!sess || !sess.items.length) return;
-    if(Math.abs(f - 1) < 0.005){ // released back at 100% → nothing changed
-      sess.items.forEach(it => { it.a.width = it.base; });
-      renderAll();
+    const v = Math.max(1, parseInt(e.target.value, 10) || 1);
+    $('layerWidthVal').textContent = v;
+    if(!layerWidthSession.items.length){
+      $('layerWidthVal').textContent = 'no lines';
       return;
     }
+    layerWidthSession.items.forEach(it => { it.a.width = v; }); // absolute set
+    renderWidthPreviewThrottled(layerWidthSession.layerId);
+  });
+
+  $('layerWidthSlider').addEventListener('change', e=>{
+    const sess = layerWidthSession;
+    layerWidthSession = null;
+    if(!sess || !sess.items.length){ syncLayerWidthSlider(); return; }
+    // Idempotence guard: if nothing actually changed (e.g. a tablet fired a
+    // stray change mid-drag at the same value), record nothing.
+    const changed = sess.items.filter(it => it.a.width !== it.prev);
+    if(!changed.length) return; // slider stays where the user left it
     actions.push({
       type: 'layerWidth', id: ++actionCounter, layer: sess.layerId,
-      items: sess.items.map(it => ({ a: it.a, prev: it.base, next: it.a.width }))
+      items: changed.map(it => ({ a: it.a, prev: it.prev, next: it.a.width }))
     });
     redoStack.length = 0;
-    toast(`Line width ×${f.toFixed(2)} applied (Ctrl+Z to undo).`);
+    renderAll(); // full sync once on commit (thumbnails, live edit, minimap)
+    toast(`Line width set to ${changed[0].a.width}px (Ctrl+Z to undo).`);
   });
 
   $('layerDelBtn').addEventListener('click', ()=>{
