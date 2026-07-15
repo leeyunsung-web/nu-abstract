@@ -59,22 +59,25 @@
     font-family: var(--font-mono); font-size: 10px; color: var(--sub);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .dl-btn {
-    flex: none; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.5px;
-    border: 1px solid var(--border); border-radius: 8px; background: var(--panel);
-    color: var(--ink); padding: 4px 8px; cursor: pointer;
-  }
-  .dl-btn:hover { background: var(--ink); color: #fff; border-color: var(--ink); }
-  /* delete button: hidden until right-click reveals it */
-  .del-btn {
-    position: absolute; top: 8px; right: 8px; display: none;
+  /* action buttons: hidden until right-click reveals them */
+  .dl-btn, .del-btn {
+    position: absolute; right: 8px; display: none;
     font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.5px;
-    border: 1px solid #c0392b; border-radius: 8px; background: #fff;
-    color: #c0392b; padding: 4px 8px; cursor: pointer;
+    border-radius: 8px; padding: 4px 8px; cursor: pointer;
     box-shadow: 0 4px 12px rgba(0,0,0,0.12);
   }
+  .dl-btn {
+    top: 8px;
+    border: 1px solid var(--border); background: #fff; color: var(--ink);
+  }
+  .dl-btn:hover { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .del-btn {
+    top: 40px;
+    border: 1px solid #c0392b; background: #fff; color: #c0392b;
+  }
   .del-btn:hover { background: #c0392b; color: #fff; }
-  .card.show-del .del-btn { display: block; }
+  .card.show-actions .dl-btn,
+  .card.show-actions .del-btn { display: block; }
   .empty {
     grid-column: 1 / -1; text-align: center; color: var(--sub);
     font-family: var(--font-mono); font-size: 12px; padding: 80px 0;
@@ -168,11 +171,11 @@
     document.getElementById('countChip').textContent = count + ' WORK' + (count === 1 ? '' : 'S');
   }
 
-  function hideAllDeletes(){
-    document.querySelectorAll('.card.show-del').forEach(c => c.classList.remove('show-del'));
+  function hideAllActions(){
+    document.querySelectorAll('.card.show-actions').forEach(c => c.classList.remove('show-actions'));
   }
   document.addEventListener('pointerdown', e=>{
-    if(!e.target.closest('.del-btn')) hideAllDeletes();
+    if(!e.target.closest('.dl-btn') && !e.target.closest('.del-btn')) hideAllActions();
   });
 
   function makeCard(f, i){
@@ -191,15 +194,16 @@
     name.className = 'name';
     name.textContent = f.name;
     meta.appendChild(name);
+    card.appendChild(meta);
+
+    // hidden actions \u2014 revealed by right-click on the work
     const dl = document.createElement('button');
     dl.className = 'dl-btn';
     dl.textContent = '\u2b07 DOWNLOAD';
     dl.title = 'Save the full-size PNG to your device';
-    dl.addEventListener('click', ()=> downloadFile(f));
-    meta.appendChild(dl);
-    card.appendChild(meta);
+    dl.addEventListener('click', ()=>{ downloadFile(f); hideAllActions(); });
+    card.appendChild(dl);
 
-    // hidden delete button \u2014 revealed by right-click (master only)
     if(isMaster){
       const del = document.createElement('button');
       del.className = 'del-btn';
@@ -207,14 +211,13 @@
       del.title = 'Remove this work from the gallery';
       del.addEventListener('click', ()=> deleteFile(f, card));
       card.appendChild(del);
-      card.addEventListener('contextmenu', e=>{
-        e.preventDefault();
-        hideAllDeletes();
-        card.classList.add('show-del');
-      });
-    } else {
-      card.addEventListener('contextmenu', e=> e.preventDefault());
     }
+
+    card.addEventListener('contextmenu', e=>{
+      e.preventDefault();
+      hideAllActions();
+      card.classList.add('show-actions');
+    });
 
     setTimeout(()=> card.classList.add('shown'), 40 * (i % 15));
     return card;
