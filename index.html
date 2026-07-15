@@ -1097,31 +1097,66 @@
   let selectedLayerIds = new Set(); // Shift+click multi-selection
   // Inline rename on double-click (no prompt popups). Enter/blur commits,
   // Escape cancels.
+  function startInlineRename(span, getName, setName){
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = getName();
+    input.className = 'layer-rename';
+    input.addEventListener('pointerdown', e2=> e2.stopPropagation()); // don't start a row drag
+    let done = false;
+    const commit = ()=>{
+      if(done) return;
+      done = true;
+      const v = input.value.trim();
+      if(v) setName(v);
+      renderLayersPanel();
+    };
+    input.addEventListener('keydown', e2=>{
+      if(e2.key === 'Enter') commit();
+      if(e2.key === 'Escape'){ done = true; renderLayersPanel(); }
+    });
+    input.addEventListener('blur', commit);
+    span.replaceWith(input);
+    input.focus();
+    input.select();
+  }
   function attachInlineRename(span, getName, setName){
     span.addEventListener('dblclick', ev=>{
       ev.stopPropagation();
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.value = getName();
-      input.className = 'layer-rename';
-      input.addEventListener('pointerdown', e2=> e2.stopPropagation()); // don't start a row drag
-      let done = false;
-      const commit = ()=>{
-        if(done) return;
-        done = true;
-        const v = input.value.trim();
-        if(v) setName(v);
-        renderLayersPanel();
-      };
-      input.addEventListener('keydown', e2=>{
-        if(e2.key === 'Enter') commit();
-        if(e2.key === 'Escape'){ done = true; renderLayersPanel(); }
-      });
-      input.addEventListener('blur', commit);
-      span.replaceWith(input);
-      input.focus();
-      input.select();
+      startInlineRename(span, getName, setName);
     });
+  }
+  // Open the rename editor from a context menu: the panel may have been
+  // re-rendered since, so locate the row's CURRENT name span first.
+  function renameLayerById(id){
+    const l = layers.find(x=>x.id===id);
+    if(!l) return;
+    renderLayersPanel();
+    const span = document.querySelector(`.layer-row[data-layer-id="${id}"] .layer-name`);
+    if(span) startInlineRename(span, ()=>l.name, v=>{ l.name = v; });
+  }
+  function renameFolderById(fid){
+    const f = folders.find(x=>x.id===fid);
+    if(!f) return;
+    renderLayersPanel();
+    const span = document.querySelector(`.layer-folder-row[data-folder-id="${fid}"] .layer-name`);
+    if(span) startInlineRename(span, ()=>f.name, v=>{ f.name = v; });
+  }
+
+  // ===== 2) Merge every multi-selected layer into one (bottom-most wins) =====
+  function mergeSelectedLayers(){
+    const sel = layers.filter(l=>selectedLayerIds.has(l.id));
+    if(sel.length < 2){ toast('Select two or more layers first (Shift+click).'); return; }
+    const target = sel[0]; // bottom-most in the stack
+    // merge upward one by one — each step is individually undoable and goes
+    // through the full merge pipeline (mask stacking, recolor baking).
+    for(let i=1; i<sel.length; i++){
+      mergeLayers(sel[i].id, target.id);
+    }
+    selectedLayerIds = new Set([target.id]);
+    activeLayerId = target.id;
+    renderLayersPanel();
+    toast(`${sel.length} layers merged into ${target.name}.`);
   }
 
   // Keep folder members contiguous in the stack (anchored at the first
@@ -1271,9 +1306,10 @@
       });
       row.addEventListener('contextmenu', ev=>{
         ev.preventDefault();
-        showLayerMenu(ev.clientX, ev.clientY, [
-          { label: '\u25a3 REGISTER FOLDER AS OBJECT', fn: ()=> registerFolderAsObject(f.id) },
-          { label: '\u2b73 DISSOLVE FOLDER', fn: ()=> dissolveFolder(f.id) }
+showLayerMenu(ev.clientX, ev.clientY, [
+          { label: '✎ RENAME FOLDER', fn: ()=> renameFolderById(f.id) },
+          { label: '▣ REGISTER FOLDER AS OBJECT', fn: ()=> registerFolderAsObject(f.id) },
+          { label: '⭳ DISSOLVE FOLDER', fn: ()=> dissolveFolder(f.id) }
         ]);
       });
       return row;
@@ -1347,9 +1383,13 @@
         ev.preventDefault();
         if(ev.shiftKey){ createFolderWithLayers(selectedLayerIds.size > 1 ? layers.filter(x=>selectedLayerIds.has(x.id)) : [l]); return; }
         const items = [
+          { label: '✎ RENAME LAYER', fn: ()=> renameLayerById(l.id) },
           { label: selectedLayerIds.size > 1 ? ('📁 NEW FOLDER WITH ' + selectedLayerIds.size + ' SELECTED LAYERS') : '📁 NEW FOLDER WITH THIS LAYER',
             fn: ()=> createFolderWithLayers(selectedLayerIds.size > 1 ? layers.filter(x=>selectedLayerIds.has(x.id)) : [l]) }
         ];
+        if(selectedLayerIds.size > 1){
+          items.push({ label: `⧉ MERGE ${selectedLayerIds.size} SELECTED INTO ONE`, fn: ()=> mergeSelectedLayers() });
+        }
         if(l.folderId != null){
           items.push({ label: '⭱ REMOVE FROM FOLDER', fn: ()=> removeLayerFromFolder(l) });
         }
@@ -1550,7 +1590,7 @@
     if(layers.length <= 1){ toast('At least one layer is required.'); return; }
     const al = activeLayer();
     const n = actions.filter(a=>a.layer===al.id).length;
-    if(!confirm(`Delete ${al.name}${n ? ` and its ${n} action(s)` : ''}?`)) return;
+    // no confirm — deletes are immediate by design
     for(let i=actions.length-1; i>=0; i--){ if(actions[i].layer===al.id) actions.splice(i,1); }
     // Merge markers snapshot the whole history — after a layer delete those
     // snapshots are no longer valid, so drop them (their merge stays applied).
@@ -2813,7 +2853,7 @@
   }
 
   async function deleteFileNode(f){
-    if(!confirm(`Delete file "${f.name}"? This removes it from GitHub.`)) return;
+    // no confirm — immediate delete
     toast(`Deleting ${f.name}…`);
     try {
       await mgrDeleteFile(f.path, f.sha, `Delete ${f.name}`);
@@ -2825,7 +2865,7 @@
   }
 
   async function deleteFolder(path, name){
-    if(!confirm(`Delete folder "${name}" and ALL its contents? This cannot be undone.`)) return;
+    // no confirm — immediate delete
     toast(`Deleting folder ${name}…`);
     try {
       await deleteFolderRecursive(path);
@@ -2895,7 +2935,7 @@
   async function bulkDeleteSelected(){
     const paths = Array.from(mgrSelected);
     if(paths.length === 0) return;
-    if(!confirm(`Delete ${paths.length} selected file(s)? This cannot be undone.`)) return;
+    // no confirm — immediate delete
     let ok = 0;
     for(const p of paths){
       const f = mgrCurrentFiles.find(x=>x.path===p);
@@ -4800,7 +4840,7 @@
       delBtn.textContent = 'DEL';
       delBtn.title = 'Remove this sample from the list';
       delBtn.addEventListener('click', ()=>{
-        if(confirm(`Delete OBJ-${String(obj.id).padStart(2,'0')} from samples?`)){
+        {
           if(liveEditTarget === obj) liveEditTarget = null;
           removeObject(obj.id);
         }
@@ -4827,10 +4867,23 @@
       const offY = Math.round((ch - oh) / 2);
 
       if(obj.recipe && obj.recipe.length > 0){
-        // Ensure enough layers exist for the recipe's layer indices.
+        // Load into BRAND-NEW layers appended on top \u2014 never merge into the
+        // layers already on the canvas. The recipe's own layer indices (li)
+        // are remapped onto these fresh layers, and they're grouped in a
+        // folder so the loaded object stays a tidy, movable unit.
         const maxLi = obj.recipe.reduce((m,a)=> Math.max(m, a.li || 0, ...(a.sli || [0])), 0);
-        while(layers.length <= maxLi) layers.push(createLayer());
-        const layerIdFor = a => layers[Math.min(a.li || 0, layers.length-1)].id;
+        const fresh = [];
+        for(let i=0; i<=maxLi; i++){
+          const nl = createLayer(`OBJ-${String(obj.id).padStart(2,'0')}${maxLi>0 ? ' L'+(i+1) : ''}`);
+          layers.push(nl);
+          fresh.push(nl);
+        }
+        const grpF = { id: ++folderIdCounter, name: `OBJ-${String(obj.id).padStart(2,'0')}` };
+        folders.push(grpF);
+        fresh.forEach(l=>{ l.folderId = grpF.id; });
+        activeLayerId = fresh[fresh.length-1].id;
+        activeFolderId = grpF.id;
+        const layerIdFor = a => fresh[Math.min(a.li || 0, fresh.length-1)].id;
         const loadStart = actions.length; // bake erasers after the whole batch lands
         obj.recipe.forEach(a=>{
           if(a.type === 'stroke'){
@@ -4848,7 +4901,7 @@
               color:a.color, tolerance:a.tolerance, layer: layerIdFor(a)
             };
             if(a.sli && a.sli.length){
-              act.src = [...new Set(a.sli.map(i => layers[Math.min(i, layers.length-1)].id))];
+              act.src = [...new Set(a.sli.map(i => fresh[Math.min(i, fresh.length-1)].id))];
             }
             if(a.m){ act.m = a.m; act.ox = (a.ox||0) + offX; act.oy = (a.oy||0) + offY;
                      if(a.mw){ act.mw = a.mw; act.mh = a.mh; } }
@@ -4882,11 +4935,17 @@
         const ictx = img.getContext('2d');
         ictx.imageSmoothingEnabled = false;
         ictx.drawImage(obj.canvas, 0, 0);
-        actions.push({ type:'image', id:++actionCounter, img, x:offX, y:offY, w:ow, h:oh, layer: activeLayer().id });
+        // Stamp onto a brand-new layer so it never merges with existing art.
+        const nl = createLayer(`OBJ-${String(obj.id).padStart(2,'0')}`);
+        layers.push(nl);
+        activeLayerId = nl.id;
+        activeFolderId = null;
+        actions.push({ type:'image', id:++actionCounter, img, x:offX, y:offY, w:ow, h:oh, layer: nl.id });
+        renderLayersPanel();
         redoStack.length = 0;
         clearStrokeSelection();
         renderAll();
-        toast(`Loaded OBJ-${String(obj.id).padStart(2,'0')} to drawing (image).`);
+        toast(`Loaded OBJ-${String(obj.id).padStart(2,'0')} to drawing (image, new layer).`);
       }
     } catch(err){
       console.error('loadSampleToDrawing failed:', err);
