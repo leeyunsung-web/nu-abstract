@@ -1626,20 +1626,25 @@ showLayerMenu(ev.clientX, ev.clientY, [
   $('layerDelBtn').addEventListener('click', ()=>{
     if(layers.length <= 1){ toast('At least one layer is required.'); return; }
     const al = activeLayer();
-    const n = actions.filter(a=>a.layer===al.id).length;
-    // no confirm — deletes are immediate by design
-    for(let i=actions.length-1; i>=0; i--){ if(actions[i].layer===al.id) actions.splice(i,1); }
-    // Merge markers snapshot the whole history — after a layer delete those
-    // snapshots are no longer valid, so drop them (their merge stays applied).
-    for(let i=actions.length-1; i>=0; i--){ if(actions[i].type==='mergeLayers') actions.splice(i,1); }
-    redoStack.length = 0;
     const idx = layers.findIndex(x=>x.id===al.id);
+    // UNDOABLE delete: snapshot the full action order + the layer object,
+    // then remove. Ctrl+Z restores the layer with all its actions exactly.
+    const marker = {
+      type: 'layerDelete', id: ++actionCounter,
+      layerObj: al, layerIdx: idx,
+      prevOrder: actions.slice(),
+      prevActive: activeLayerId
+    };
+    for(let i=actions.length-1; i>=0; i--){ if(actions[i].layer===al.id) actions.splice(i,1); }
     layers.splice(idx, 1);
     activeLayerId = layers[Math.max(0, idx-1)].id;
+    if(activeFolderId != null && !layers.some(l=>l.folderId===activeFolderId)) activeFolderId = null;
+    actions.push(marker);
+    redoStack.length = 0;
     clearStrokeSelection();
     renderAll();
     renderLayersPanel();
-    toast('Layer deleted.');
+    toast(`${al.name} deleted (Ctrl+Z to undo).`);
   });
 
   function moveActiveLayer(dir){
@@ -3114,7 +3119,8 @@ showLayerMenu(ev.clientX, ev.clientY, [
       const cursorCircle = $('canvasCursor');
       cursorCircle.style.display = 'block';
       // Local (untransformed) pixels: the view's CSS scale handles zoom visually.
-      const W0 = $('canvasView').offsetWidth || 1;
+      const view = $('canvasView');
+      const W0 = ((view.parentElement || view).getBoundingClientRect().width) || 1;
       const size = brushSize * (W0 / 1080);
       cursorCircle.style.width = size + 'px';
       cursorCircle.style.height = size + 'px';
@@ -3172,16 +3178,20 @@ showLayerMenu(ev.clientX, ev.clientY, [
   }
 
   function getPos(e){
+    // Use the UNTRANSFORMED parent frame for the base geometry: its rect is
+    // exact (fractional CSS pixels), whereas offsetWidth is integer-rounded
+    // and the transformed bbox mixes in the scale/rotation. The sub-pixel
+    // skew from rounding was invisible at 100% but got magnified by zoom,
+    // making the pointer feel unstable when zoomed in.
     const view = $('canvasView');
-    // The transformed bbox's CENTER is exact (translate moves it, rotate and
-    // scale about the center keep it) — walk backwards from there.
-    const r = view.getBoundingClientRect();
-    const cx = r.left + r.width/2, cy = r.top + r.height/2;
+    const fr = (view.parentElement || view).getBoundingClientRect(); // .canvas-frame, untransformed
+    const cx = fr.left + fr.width/2 + viewPanX;   // transformed view center = frame center + pan
+    const cy = fr.top  + fr.height/2 + viewPanY;
     const vx = e.clientX - cx, vy = e.clientY - cy;
     const cos = Math.cos(-viewRot), sin = Math.sin(-viewRot);
     const ux = vx*cos - vy*sin;
     const uy = vx*sin + vy*cos;
-    const W0 = view.offsetWidth || 1, H0 = view.offsetHeight || 1; // untransformed layout size
+    const W0 = fr.width || 1, H0 = fr.height || 1; // exact fractional layout size
     const lx = ux/viewZoom + W0/2, ly = uy/viewZoom + H0/2;        // local CSS coords
     return { x: lx * (drawCanvas.width / W0), y: ly * (drawCanvas.height / H0), _lx: lx, _ly: ly };
   }
@@ -3219,7 +3229,8 @@ showLayerMenu(ev.clientX, ev.clientY, [
   // Pan so the given canvas point lands at the center of the frame.
   function panToCanvasPoint(cx, cy){
     const view = $('canvasView');
-    const W0 = view.offsetWidth || 1, H0 = view.offsetHeight || 1;
+    const fr = (view.parentElement || view).getBoundingClientRect();
+    const W0 = fr.width || 1, H0 = fr.height || 1;
     const lx = (cx / drawCanvas.width) * W0 - W0/2;
     const ly = (cy / drawCanvas.height) * H0 - H0/2;
     const sx = lx * viewZoom, sy = ly * viewZoom;
@@ -4322,8 +4333,13 @@ showLayerMenu(ev.clientX, ev.clientY, [
     const last = pts[pts.length-1];
     const dx = p.x - last.x, dy = p.y - last.y;
     const dist = Math.hypot(dx, dy);
-    if(dist <= lazyRadius) return; // string is slack → brush stays put
-    const t = (dist - lazyRadius) / dist;
+    // The stabilizer slack is meant to feel constant ON SCREEN. Its value is
+    // stored in canvas px, so divide by the view zoom — otherwise zooming in
+    // multiplied the dead-zone (e.g. 4× zoom → 4× bigger slack) and the
+    // brush felt detached from the pointer.
+    const slack = lazyRadius / (viewZoom || 1);
+    if(dist <= slack) return; // string is slack → brush stays put
+    const t = (dist - slack) / dist;
     pts.push({ x: last.x + dx * t, y: last.y + dy * t });
     repaintLiveStroke();
   });
@@ -4398,6 +4414,18 @@ showLayerMenu(ev.clientX, ev.clientY, [
       toast('Layer texture undone.');
       return;
     }
+    // Layer delete → put the layer and its actions back exactly.
+    if(undoneAction.type === 'layerDelete'){
+      layers.splice(Math.min(undoneAction.layerIdx, layers.length), 0, undoneAction.layerObj);
+      actions.length = 0;
+      actions.push(...undoneAction.prevOrder);
+      activeLayerId = undoneAction.prevActive;
+      clearStrokeSelection();
+      renderAll();
+      renderLayersPanel();
+      toast(`${undoneAction.layerObj.name} restored.`);
+      return;
+    }
     // Folder operations → restore structure from the marker.
     if(undoneAction.type === 'folderCreate'){
       undoneAction.members.forEach(m=>{ m.l.folderId = m.prev; });
@@ -4451,6 +4479,19 @@ showLayerMenu(ev.clientX, ev.clientY, [
       return;
     }
     const redoneAction = redoStack.pop();
+    if(redoneAction.type === 'layerDelete'){
+      const lid = redoneAction.layerObj.id;
+      for(let i=actions.length-1; i>=0; i--){ if(actions[i].layer===lid) actions.splice(i,1); }
+      const i2 = layers.findIndex(x=>x.id===lid);
+      if(i2 >= 0) layers.splice(i2, 1);
+      if(activeLayerId === lid) activeLayerId = layers[Math.max(0, i2-1)].id;
+      actions.push(redoneAction);
+      clearStrokeSelection();
+      renderAll();
+      renderLayersPanel();
+      toast('Layer deleted again.');
+      return;
+    }
     if(redoneAction.type === 'folderCreate'){
       if(!folders.some(f=>f.id === redoneAction.folder.id)) folders.push(redoneAction.folder);
       redoneAction.members.forEach(m=>{ m.l.folderId = redoneAction.folder.id; });
