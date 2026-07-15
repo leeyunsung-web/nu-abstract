@@ -132,10 +132,12 @@
   #navInfo { font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); }
   .tex-label { font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); flex: 1 1 100%; }
   .tex-group { display: flex; gap: 4px; flex: 1 1 100%; }
+  .paper-btn,
   .tex-btn {
     flex: 1; font-family: var(--font-mono); font-size: 10px; padding: 4px 2px; border-radius: 6px;
     border: 1px solid var(--border); background: var(--panel); color: var(--ink-dim); cursor: pointer;
   }
+  .paper-btn.active,
   .tex-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
   #liveTexBtn.live-on { background: var(--ink); color: #fff; }
   #navPreview {
@@ -728,6 +730,22 @@
         <button class="btn btn-sm btn-full" id="liveTexBtn"
           title="When ON, changing TEXTURE or GRAIN re-textures every stroke on the ACTIVE layer in real time (undoable)">◈ LIVE → ACTIVE LAYER: OFF</button>
       </div>
+      <div class="tool-row" id="paperRow" style="display:none;gap:6px;flex-wrap:wrap;align-items:center;">
+        <span class="tex-label" title="MASTER only — display-only paper grain, never baked into objects or exports">PAPER</span>
+        <div class="tex-group">
+          <button class="paper-btn active" data-paper="none" title="Plain surface">NONE</button>
+          <button class="paper-btn" data-paper="paper" title="Fine drawing-paper tooth">PAPER</button>
+          <button class="paper-btn" data-paper="canvas" title="Woven canvas fabric">CANVAS</button>
+          <button class="paper-btn" data-paper="rough" title="Coarse rough grain">ROUGH</button>
+          <button class="paper-btn" data-paper="custom" id="paperUploadBtn" title="Upload your own texture image">⬆ UPLOAD</button>
+        </div>
+        <input type="file" id="paperFile" accept="image/*" style="display:none;">
+        <div class="range-row">
+          <span>DEPTH</span>
+          <input type="range" id="paperDepth" min="0" max="100" value="45" title="Texture visibility">
+          <span class="val" id="paperDepthVal">45</span>
+        </div>
+      </div>
       <div class="tool-row" id="toleranceRow" style="display:flex;gap:10px;flex-wrap:wrap;">
         <div class="range-row">
           <span>TOLERANCE</span>
@@ -772,6 +790,9 @@
         <div id="traceSelectBox"></div>
         <canvas id="drawCanvas" width="1080" height="1080"></canvas>
         <div id="canvasCursor"></div>
+        <canvas id="paperOverlay" width="540" height="540"
+                style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none;
+                       mix-blend-mode:multiply; display:none;"></canvas>
         <canvas id="lassoOverlay" width="1080" height="1080"
                 style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none;"></canvas>
         </div>
@@ -855,6 +876,9 @@
 
       <div class="canvas-frame comp-frame">
         <canvas id="compCanvas" width="1080" height="1080"></canvas>
+        <canvas id="compPaperOverlay" width="540" height="540"
+                style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none;
+                       mix-blend-mode:multiply; display:none;"></canvas>
       </div>
 
       <div class="comp-item-editor" id="compItemEditor" hidden>
@@ -1053,6 +1077,7 @@
   function setRole(role){
     localStorage.setItem(ROLE_KEY, role);
     applyRole(role);
+    if(typeof applyPaper === 'function') applyPaper();
   }
 
   function showLogin(){
@@ -1631,6 +1656,176 @@ showLayerMenu(ev.clientX, ev.clientY, [
     compositeLayers();
     toast(l.name + ' added.');
   });
+
+  // ==================== PAPER TEXTURE (display-only) ====================
+  // Procedurally generated grain rendered on a separate multiply-blended
+  // overlay ABOVE the drawing. Because it never touches drawCanvas or the
+  // layer bitmaps, registered objects, exports, variations and the minimap
+  // all stay perfectly clean — the texture is a viewing surface, like real
+  // paper under ink.
+  const PAPER_KEY = 'nu_paper_v1';
+  let paperKind = 'none', paperDepth = 45;
+  let paperCustomSrc = null;   // dataURL of the uploaded texture
+  let paperCustomImg = null;   // decoded Image (cached)
+
+  // small tileable value-noise sampler
+  function makeValueNoise(rnd, gw){
+    const g = new Float32Array(gw*gw);
+    for(let i=0;i<g.length;i++) g[i] = rnd();
+    return (x, y)=>{
+      const xi = Math.floor(x) % gw, yi = Math.floor(y) % gw;
+      const xf = x - Math.floor(x), yf = y - Math.floor(y);
+      const x2 = (xi+1) % gw, y2 = (yi+1) % gw;
+      const sx = xf*xf*(3-2*xf), sy = yf*yf*(3-2*yf);
+      const a = g[yi*gw+xi], b = g[yi*gw+x2], c2 = g[y2*gw+xi], d = g[y2*gw+x2];
+      return (a + (b-a)*sx) + ((c2 + (d-c2)*sx) - (a + (b-a)*sx)) * sy;
+    };
+  }
+
+  function renderPaperTexture(kind){
+    const oc = $('paperOverlay');
+    const N = oc.width; // 540 — CSS scales it up, grain reads naturally
+    const ctx2 = oc.getContext('2d');
+    if(kind === 'none'){ ctx2.clearRect(0,0,N,N); return; }
+    if(kind === 'custom'){
+      ctx2.clearRect(0,0,N,N);
+      if(!paperCustomSrc) return;
+      const draw = img=>{
+        // cover-fit the uploaded texture over the square overlay
+        const k = Math.max(N / img.width, N / img.height);
+        const dw = img.width * k, dh = img.height * k;
+        ctx2.drawImage(img, (N-dw)/2, (N-dh)/2, dw, dh);
+        // refresh the composition mirror once the async decode lands
+        const cop = $('compPaperOverlay');
+        if(cop && cop.style.display !== 'none') cop.getContext('2d').drawImage(oc, 0, 0);
+      };
+      if(paperCustomImg && paperCustomImg.complete && paperCustomImg._src === paperCustomSrc){
+        draw(paperCustomImg);
+      } else {
+        const img = new Image();
+        img.onload = ()=>{ paperCustomImg = img; img._src = paperCustomSrc; draw(img); };
+        img.src = paperCustomSrc;
+      }
+      return;
+    }
+    const rnd = mulberry32(kind === 'paper' ? 101 : kind === 'canvas' ? 202 : 303);
+    const n1 = makeValueNoise(rnd, 64);
+    const n2 = makeValueNoise(rnd, 16);
+    const img = ctx2.createImageData(N, N);
+    const d = img.data;
+    for(let y=0; y<N; y++){
+      for(let x=0; x<N; x++){
+        let v; // 255 = invisible under multiply; lower = darker grain
+        if(kind === 'paper'){
+          // fine tooth: high-freq speckle + soft fiber clumps (2× density)
+          const f = n1(x*1.1, y*1.1)*0.65 + n2(x*0.14, y*0.14)*0.35;
+          v = 255 - Math.pow(f, 2.2) * 26;
+        } else if(kind === 'canvas'){
+          // woven fabric: two perpendicular thread waves + slight noise (2×)
+          const wx = Math.sin(x*0.84) * 0.5 + 0.5;
+          const wy = Math.sin(y*0.84) * 0.5 + 0.5;
+          const weave = Math.max(wx*wx, wy*wy);        // thread ridges
+          const dip = (1-wx)*(1-wy);                   // gaps between threads
+          v = 255 - weave*9 - dip*22 - n1(x*0.6, y*0.6)*8;
+        } else { // rough (2× density)
+          const f = n2(x*0.09, y*0.09)*0.7 + n1(x*1.0, y*1.0)*0.3;
+          v = 255 - Math.pow(f, 1.6) * 40;
+        }
+        const i = (y*N + x) * 4;
+        d[i] = d[i+1] = d[i+2] = Math.max(0, Math.min(255, Math.round(v)));
+        d[i+3] = 255;
+      }
+    }
+    ctx2.putImageData(img, 0, 0);
+  }
+
+  function applyPaper(){
+    const oc = $('paperOverlay');
+    const isMaster = userRole === 'master';
+    // Guests never see the paper feature — no menu, no effect anywhere.
+    $('paperRow').style.display = isMaster ? 'flex' : 'none';
+    const on = isMaster && paperKind !== 'none' && paperDepth > 0
+               && !(paperKind === 'custom' && !paperCustomSrc);
+    if(!on){
+      oc.style.display = 'none';
+    } else {
+      renderPaperTexture(paperKind);
+      oc.style.display = 'block';
+      oc.style.opacity = (paperDepth / 100).toFixed(2);
+    }
+    // COMPOSITION mirrors the drawing's paper — but only in MASTER mode.
+    const cop = $('compPaperOverlay');
+    if(cop){
+      const showComp = on;
+      cop.style.display = showComp ? 'block' : 'none';
+      if(showComp){
+        cop.getContext('2d').drawImage($('paperOverlay'), 0, 0);
+        cop.style.opacity = (paperDepth / 100).toFixed(2);
+      }
+    }
+    document.querySelectorAll('.paper-btn').forEach(b=>
+      b.classList.toggle('active', b.dataset.paper === paperKind));
+    $('paperDepthVal').textContent = paperDepth;
+    $('paperDepth').value = paperDepth;
+    try {
+      const payload = { k: paperKind, d: paperDepth };
+      if(paperCustomSrc) payload.img = paperCustomSrc;
+      localStorage.setItem(PAPER_KEY, JSON.stringify(payload));
+    } catch(e){
+      toast('Paper texture too large to remember — it will reset on reload.');
+    }
+  }
+
+  document.querySelectorAll('.paper-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(btn.dataset.paper === 'custom'){
+        if(userRole !== 'master'){ toast('Master access required.'); return; }
+        $('paperFile').click(); // pick a file; selection applies on load
+        return;
+      }
+      paperKind = btn.dataset.paper;
+      applyPaper();
+    });
+  });
+  $('paperFile').addEventListener('change', e=>{
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if(!f) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      const img = new Image();
+      img.onload = ()=>{
+        // Downscale to the overlay resolution and re-encode compactly so the
+        // texture fits comfortably in localStorage (single slot, no clutter).
+        const t = document.createElement('canvas');
+        const k = Math.max(540 / img.width, 540 / img.height);
+        t.width = 540; t.height = 540;
+        const tc = t.getContext('2d');
+        tc.drawImage(img, (540 - img.width*k)/2, (540 - img.height*k)/2, img.width*k, img.height*k);
+        paperCustomSrc = t.toDataURL('image/jpeg', 0.82);
+        paperCustomImg = null;
+        paperKind = 'custom';
+        applyPaper();
+        toast('Custom paper applied.');
+      };
+      img.onerror = ()=> toast('Could not read that image file.');
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(f);
+  });
+  $('paperDepth').addEventListener('input', e=>{
+    paperDepth = parseInt(e.target.value, 10) || 0;
+    applyPaper();
+  });
+  try {
+    const saved = JSON.parse(localStorage.getItem(PAPER_KEY) || 'null');
+    if(saved && typeof saved.k === 'string'){
+      paperKind = saved.k;
+      paperDepth = saved.d|0;
+      if(typeof saved.img === 'string') paperCustomSrc = saved.img;
+    }
+  } catch(e){}
+  applyPaper();
 
   // ==================== LASSO (Photoshop-style select + Delete) ====================
   // Freehand selection; pressing Delete removes everything inside it on the
@@ -3777,7 +3972,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
   // On a fresh fill layer every pixel is empty, so this degenerates to a
   // solid patch; after a merge, strokes sharing the layer keep their
   // anti-aliased edges and the fill tucks under them.
-  function paintSplitFill(destCtx, mask, hexColor, ox, oy, mw, mh){
+  function paintSplitFill(destCtx, mask, hexColor, ox, oy, mw, mh, guardData){
     const w = destCtx.canvas.width, h = destCtx.canvas.height;
     mw = mw || w; mh = mh || h; // grid the mask was recorded on
     ox = Math.round(ox || 0); oy = Math.round(oy || 0);
@@ -3791,7 +3986,10 @@ showLayerMenu(ev.clientX, ev.clientY, [
       if(x<0 || x>=w || y<0 || y>=h) continue;
       const i = (y*w + x)*4;
       const da = od[i+3];
-      if(m===1 && da>=250){
+      // Guarded pixels are warped LINE pixels — the fill must always go
+      // UNDERNEATH them, even where the mask's core lands on the line.
+      const guarded = guardData && guardData[(y*w + x)*4 + 3] >= 200;
+      if(m===1 && da>=250 && !guarded){
         // Core, fully opaque on dest (e.g. refilling a merged fill) → replace.
         od[i]=fr; od[i+1]=fg; od[i+2]=fb; od[i+3]=255;
       } else {
@@ -5530,7 +5728,30 @@ showLayerMenu(ev.clientX, ev.clientY, [
     // Use recipe if available to redraw cleanly
     if(obj.recipe && obj.recipe.length > 0) {
       // Variations should texture and warp only the FINAL visible lines.
-      const bakedRecipe = bakeErasers(obj.recipe, a => a.li || 0);
+      // 1) Bake whole-layer recolors INTO the actions first. The old path
+      //    called applyLayerRecolor on the FLAT variation canvas, which
+      //    recolors every pixel painted so far — lines included — turning
+      //    the whole variation into flat color with no visible lineart.
+      const recolored = [];
+      for(const a of obj.recipe){
+        if(a.type === 'layerRecolor'){
+          const li0 = a.li || 0;
+          for(const b of recolored){
+            if((b.li || 0) === li0 && (b.type === 'stroke' || b.type === 'fill')) b.color = a.color;
+          }
+        } else {
+          recolored.push(a.type === 'stroke' ? { ...a } : { ...a });
+        }
+      }
+      // 2) Fold erasers into the stroke geometry.
+      const bakedRecipe = bakeErasers(recolored, a => a.li || 0);
+      // 3) Guard canvas: marks where warped LINES have been painted, so a
+      //    warped fill's core (REPLACE rule) can never devour line pixels
+      //    when the grid-sampled mask warp lands a couple px off the
+      //    exactly-warped strokes.
+      const guard = document.createElement('canvas');
+      guard.width = size; guard.height = size;
+      const guardCtx = guard.getContext('2d', { willReadFrequently: true });
       const centerX = size/2, centerY = size/2;
       const angle = rand(-10, 10) * Math.PI/180;
       const baseScale = rand(0.9, 1.1);
@@ -5551,13 +5772,18 @@ showLayerMenu(ev.clientX, ev.clientY, [
       bakedRecipe.forEach(a=>{
         if(a.type === 'stroke'){
           let pts = a.points;
-          let finalPts = pts.map(transformPt);
+          let finalPts = pts.map(p => transformPt(p));
           const isEraser = a.tool === 'eraser';
           const newColor = isEraser ? a.color : shiftColor(a.color, colorShift);
+          // recipes store textures under compact keys (tx/g/sd)
+          const tex = a.texture || a.tx || 'smooth';
+          const grn = (a.grain != null ? a.grain : (a.g != null ? a.g : 50));
+          const sd2 = (a.seed != null ? a.seed : (a.sd != null ? a.sd : 1));
 
-          strokeSmoothPath(cx, finalPts, a.width, newColor, isEraser, a.texture, a.grain, a.seed);
+          strokeSmoothPath(cx, finalPts, a.width, newColor, isEraser, tex, grn, sd2);
+          if(!isEraser) drawSmoothPathOn(guardCtx, finalPts, a.width, '#000'); // line-protection map
           redrawnActions.push({ type:'stroke', tool:a.tool, color:newColor, width:a.width, points: finalPts, li: a.li || 0,
-                                texture: a.texture, grain: a.grain, seed: a.seed });
+                                texture: tex, grain: grn, seed: sd2 });
         } else if(a.type === 'fill'){
           const finalSeed = transformPt({x:a.x, y:a.y});
           const newColor = shiftColor(a.color, colorShift);
@@ -5667,7 +5893,8 @@ showLayerMenu(ev.clientX, ev.clientY, [
               }
               for(const di2 of demote) dst[di2] = 2;
             }
-            paintSplitFill(cx, dst, newColor, 0, 0, c.width, c.height);
+            paintSplitFill(cx, dst, newColor, 0, 0, c.width, c.height,
+                           guardCtx.getImageData(0, 0, size, size).data);
             redrawnActions.push({ type:'fill', x:finalSeed.x, y:finalSeed.y, color:newColor,
                                   tolerance:a.tolerance || 0, li: a.li || 0,
                                   m: encodeMask(dst), mw: c.width, mh: c.height });
@@ -5680,18 +5907,18 @@ showLayerMenu(ev.clientX, ev.clientY, [
               let covered = 0;
               for(let vi2=0; vi2<total; vi2++){ if(vm[vi2]) covered++; }
               if((covered / total) <= 0.9){
-                paintSplitFill(cx, vm, newColor, 0, 0, c.width, c.height);
+                paintSplitFill(cx, vm, newColor, 0, 0, c.width, c.height,
+                               guardCtx.getImageData(0, 0, size, size).data);
                 redrawnActions.push({ type:'fill', x:finalSeed.x, y:finalSeed.y, color:newColor,
                                       tolerance:a.tolerance || 0, li: a.li || 0,
                                       m: encodeMask(vm), mw: c.width, mh: c.height });
               }
             }
           }
-        } else if(a.type === 'layerRecolor'){
-          const newColor = shiftColor(a.color, colorShift);
-          applyLayerRecolor(cx, newColor); // flat-canvas approximation
-          redrawnActions.push({ type:'layerRecolor', color:newColor, li: a.li || 0 });
         }
+        // layerRecolor actions were baked into stroke/fill colors above —
+        // painting them here recolored the whole flat canvas (lines too).
+
       });
       
       const bbox = getBBox(c);
