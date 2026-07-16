@@ -2590,6 +2590,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
       if(a.type==='fill'){
         const o = { type:'fill', x:Math.round(a.x*10)/10, y:Math.round(a.y*10)/10, color:a.color, tolerance:a.tolerance||0, li };
         if(a.src){ o.sli = a.src.map(id => layers.findIndex(l=>l.id===id)).filter(i=>i>=0); }
+        else if(Array.isArray(a.sli) && a.sli.length){ o.sli = a.sli; } // recipe-built fills already carry indices
         if(a.m){ o.m = a.m; if(a.mw){ o.mw = a.mw; o.mh = a.mh; } }
         if(a.ox || a.oy){ o.ox = Math.round(a.ox||0); o.oy = Math.round(a.oy||0); }
         return o;
@@ -4435,6 +4436,10 @@ showLayerMenu(ev.clientX, ev.clientY, [
         drawCanvas.style.cursor = 'copy';
         if(!mask){ toast('Already this color. Pick another color.'); return; }
         const fl = createLayer('FILL ' + (++fillLayerCounter));
+        // Filling inside a folder keeps the fill IN that folder — folder
+        // register / select-move / dissolve then treat it as one drawing.
+        const alForFill = activeLayer();
+        if(alForFill && alForFill.folderId != null) fl.folderId = alForFill.folderId;
         paintSplitFill(fl.ctx, mask, fillColor, 0, 0);
         const idx = layers.findIndex(x=>x.id===activeLayerId);
         layers.splice(Math.max(0, idx), 0, fl); // below the active layer
@@ -4569,8 +4574,11 @@ showLayerMenu(ev.clientX, ev.clientY, [
     if(a.type === 'stroke'){
       a.points.forEach(pt => { pt.x += dx; pt.y += dy; });
     } else if(a.type === 'fill'){
+      // The seed (x, y) must ALWAYS follow the move — recipes test it
+      // against the register bbox, so a stale seed made moved fills vanish
+      // from REGISTER FOLDER AS OBJECT → TO DRAWING round-trips.
+      a.x += dx; a.y += dy;
       if(a.m){ a.ox = (a.ox||0) + dx; a.oy = (a.oy||0) + dy; }
-      else { a.x += dx; a.y += dy; }
     } else if(a.type === 'image'){
       a.x += dx; a.y += dy;
     }
@@ -5311,11 +5319,41 @@ showLayerMenu(ev.clientX, ev.clientY, [
     return c;
   }
 
+  // Bounds (canvas coords, ox/oy applied) of a mask fill's painted region.
+  function maskFillBounds(a){
+    if(!a.m) return null;
+    const mw = a.mw || drawCanvas.width, mh = a.mh || drawCanvas.height;
+    const ox = Math.round(a.ox||0), oy = Math.round(a.oy||0);
+    let mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity;
+    // a.m is RLE [start, len, value, ...] — walk runs, no full decode needed.
+    for(let k=0; k<a.m.length; k+=3){
+      const start = a.m[k], len = a.m[k+1];
+      const end = start + len - 1;
+      const y0 = Math.floor(start/mw), y1 = Math.floor(end/mw);
+      if(y0 < mnY) mnY = y0;
+      if(y1 > mxY) mxY = y1;
+      if(y0 === y1){
+        const x0 = start - y0*mw, x1 = end - y1*mw;
+        if(x0 < mnX) mnX = x0;
+        if(x1 > mxX) mxX = x1;
+      } else { mnX = 0; mxX = mw-1; } // run wraps at least one row
+    }
+    if(mxX < 0) return null;
+    return { minX: mnX+ox, minY: mnY+oy, maxX: mxX+ox, maxY: mxY+oy };
+  }
+
+  // onlyLayerIds (optional Set of layer ids): restrict the recipe to actions
+  // on those layers. Used by REGISTER FOLDER AS OBJECT — without the filter
+  // the recipe swept up every stroke/fill/recolor that happened to overlap
+  // the bbox, so loading recreated OTHER folders and layers too.
   function buildRecipeForBBox(bbox, onlyLayerIds){
     const margin = 4;
     const result = [];
+    const only = (onlyLayerIds && onlyLayerIds.size) ? onlyLayerIds : null;
     const layerIndexOf = a => Math.max(0, layers.findIndex(l=>l.id===a.layer));
     actions.forEach(a=>{
+      if(only && (a.type==='stroke' || a.type==='fill' || a.type==='layerRecolor')
+              && !only.has(a.layer)) return;
       const li = layerIndexOf(a);
       if(a.type==='stroke'){
         const inside = a.points.some(p=>
@@ -5330,13 +5368,31 @@ showLayerMenu(ev.clientX, ev.clientY, [
           result.push(so);
         }
       } else if(a.type==='fill'){
-        const inside = a.x>=bbox.minX-margin && a.x<=bbox.minX+bbox.w+margin &&
-                        a.y>=bbox.minY-margin && a.y<=bbox.minY+bbox.h+margin;
+        // Mask fills: test the actual PAINTED region, not the seed — the
+        // seed can be stale on old data whose layer was moved.
+        let inside;
+        if(only){
+          inside = true; // the layer was explicitly selected for capture
+        } else if(a.m){
+          const mb = maskFillBounds(a);
+          inside = !!mb && mb.maxX>=bbox.minX-margin && mb.minX<=bbox.minX+bbox.w+margin &&
+                           mb.maxY>=bbox.minY-margin && mb.minY<=bbox.minY+bbox.h+margin;
+        } else {
+          inside = a.x>=bbox.minX-margin && a.x<=bbox.minX+bbox.w+margin &&
+                   a.y>=bbox.minY-margin && a.y<=bbox.minY+bbox.h+margin;
+        }
         if(inside){
           const o = { type:'fill', x:a.x-bbox.minX, y:a.y-bbox.minY, color:a.color, tolerance:a.tolerance, li };
-          if(a.src){ o.sli = a.src.map(id => layers.findIndex(l=>l.id===id)).filter(i=>i>=0); }
+          if(a.src){
+            // Source layers outside the capture set would spawn phantom
+            // layers (and their folders) on load — the frozen mask replays
+            // the fill exactly, so dropping them is safe.
+            const srcIds = only ? a.src.filter(id => only.has(id)) : a.src;
+            const sli = srcIds.map(id => layers.findIndex(l=>l.id===id)).filter(i=>i>=0);
+            if(sli.length) o.sli = sli;
+          }
           if(a.m){ o.m = a.m; o.ox = Math.round(a.ox||0) - bbox.minX; o.oy = Math.round(a.oy||0) - bbox.minY;
-                   if(a.mw){ o.mw = a.mw; o.mh = a.mh; } }
+                   o.mw = a.mw || drawCanvas.width; o.mh = a.mh || drawCanvas.height; }
           result.push(o);
         }
       } else if(a.type==='layerRecolor'){
@@ -5673,14 +5729,45 @@ showLayerMenu(ev.clientX, ev.clientY, [
     if(replaying){ toast('Replaying — please wait.'); return; }
     const members = layers.filter(l=>l.folderId === fid && l.visible);
     if(!members.length){ toast('Folder has no visible layers.'); return; }
+    const memberIds = new Set(members.map(l=>l.id));
     const temp = document.createElement('canvas');
     temp.width = drawCanvas.width; temp.height = drawCanvas.height;
     const tc = temp.getContext('2d');
-    for(const l of layers){ if(l.folderId === fid && l.visible) tc.drawImage(l.canvas, 0, 0); }
-    const bbox = getBBox(temp);
+    for(const l of layers){ if(memberIds.has(l.id)) tc.drawImage(l.canvas, 0, 0); }
+    let bbox = getBBox(temp);
     if(!bbox){ toast('Folder layers are empty.'); return; }
+    // The fill tool splits every fill onto its OWN layer, which (on older
+    // drawings) is not a folder member — so folder registration silently
+    // dropped every fill. Sweep in visible loose fill layers whose painted
+    // region sits inside this folder's bbox, so the colors come along in
+    // both the raster and the recipe.
+    const pad = 12;
+    const insideBBox = (x0,y0,x1,y1) =>
+      x0>=bbox.minX-pad && x1<=bbox.minX+bbox.w+pad &&
+      y0>=bbox.minY-pad && y1<=bbox.minY+bbox.h+pad;
+    const extraFill = layers.filter(l=>{
+      if(memberIds.has(l.id) || !l.visible) return false;
+      if(l.folderId != null && folders.some(f=>f.id===l.folderId)) return false; // owned by another folder
+      const acts = actions.filter(a=>a.layer===l.id);
+      if(!acts.length || !acts.some(a=>a.type==='fill' && a.m)) return false;
+      return acts.every(a=>{
+        if(a.type==='fill' && a.m){
+          const mb = maskFillBounds(a);
+          return !!mb && insideBBox(mb.minX, mb.minY, mb.maxX, mb.maxY);
+        }
+        if(a.type==='stroke')
+          return a.points.every(p=> insideBBox(p.x, p.y, p.x, p.y));
+        return a.type==='layerRecolor';
+      });
+    });
+    if(extraFill.length){
+      extraFill.forEach(l=> memberIds.add(l.id));
+      tc.clearRect(0, 0, temp.width, temp.height);
+      for(const l of layers){ if(memberIds.has(l.id)) tc.drawImage(l.canvas, 0, 0); }
+      bbox = getBBox(temp) || bbox;
+    }
     const cropped = cropCanvas(temp, bbox);
-    const recipe = buildRecipeForBBox(bbox, new Set(members.map(l=>l.id)));
+    const recipe = buildRecipeForBBox(bbox, memberIds);
     const obj = addObject(cropped, recipe);
     toast(`Folder registered as OBJ-${String(objCounter).padStart(2,'0')} (${cropped.width}×${cropped.height})`);
     try {

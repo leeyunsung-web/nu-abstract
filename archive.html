@@ -448,10 +448,15 @@
         el: el,
         x: rand(-size * 0.15, vw - size * 0.85),
         y: rand(-size * 0.15, vh - size * 0.85),
-        scale: rand(0.35, 2.2),   // extra per-item scale variety (wider)
+        // variety now comes mostly from the artwork's own resolution (see
+        // applyNaturalSize) — the extra transform stays gentle so small
+        // pieces can't get blown up into blur by this factor alone.
+        scale: rand(0.8, 1.25),
         rotate: rand(-30, 30),
         width: size,
-        height: size
+        height: size,
+        _sizeMin: sizeMin,
+        _sizeMax: sizeMax
       };
       itemsData.push(obj);
       el.style.zIndex = 5 + i; // distinct stacking per item (stable order)
@@ -466,7 +471,10 @@
       im.crossOrigin = 'anonymous';
       im.src = img.downloadUrl;
       im.loading = 'lazy';
-      im.addEventListener('load', ()=> buildHitMap(obj, im));
+      im.addEventListener('load', ()=>{
+        buildHitMap(obj, im);
+        applyNaturalSize(obj, im);
+      });
       im.addEventListener('error', ()=>{
         if(im.crossOrigin !== null){ im.crossOrigin = null; im.src = img.downloadUrl; }
       }, { once:true });
@@ -568,6 +576,27 @@
       if(hitTestObj(o, clientX, clientY)){ best = o; bestZ = z; }
     }
     return best;
+  }
+
+  // Size each piece in PROPORTION to its actual drawn resolution: big
+  // artworks read big, small doodles stay small. A hard cap keeps any
+  // image from being upscaled far past its native pixels (which is what
+  // made small pieces look bad), with mild jitter for collage variety.
+  function applyNaturalSize(obj, im){
+    const nd = Math.max(im.naturalWidth || 0, im.naturalHeight || 0);
+    if(!nd) return;
+    const r = Math.min(1, Math.max(0.05, nd / 1000));      // 1080-canvas crops → 0..1
+    const base = obj._sizeMin + Math.pow(r, 0.85) * (obj._sizeMax - obj._sizeMin);
+    let size = base * rand(0.8, 1.25);                      // gentle variety
+    size = Math.min(size, (nd * 1.6) / (obj.scale || 1));   // upscale cap: ≤ ~1.6× native
+    size = Math.max(obj._sizeMin * 0.6, Math.min(size, obj._sizeMax * 1.05));
+    const cx = obj.x + obj.width / 2, cy = obj.y + obj.height / 2;
+    obj.width = obj.height = size;
+    obj.x = cx - size / 2;
+    obj.y = cy - size / 2;
+    obj.el.style.width = size + 'px';
+    obj.el.style.height = size + 'px';
+    updateTransform(obj);
   }
 
   function updateTransform(obj){
