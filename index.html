@@ -3994,14 +3994,31 @@ showLayerMenu(ev.clientX, ev.clientY, [
     mw = mw || w; mh = mh || h; // grid the mask was recorded on
     ox = Math.round(ox || 0); oy = Math.round(oy || 0);
     const [fr,fg,fb] = hexToRgb(hexColor);
-    const out = destCtx.getImageData(0,0,w,h);
+    // Dirty-rect: fills used to read+write the ENTIRE canvas (4.6MB each way
+    // at 1080²) on every replay — a main reason complex drawings got heavy.
+    // Scan the mask's bounds first and only touch that sub-rect.
+    let mnX = mw, mnY = mh, mxX = -1, mxY = -1;
+    for(let vi=0; vi<mw*mh; vi++){
+      if(!mask[vi]) continue;
+      const x0 = vi % mw, y0 = (vi - x0) / mw;
+      if(x0 < mnX) mnX = x0;
+      if(x0 > mxX) mxX = x0;
+      if(y0 < mnY) mnY = y0;
+      if(y0 > mxY) mxY = y0;
+    }
+    if(mxX < 0) return; // empty mask
+    const bx = Math.max(0, mnX + ox), by = Math.max(0, mnY + oy);
+    const bx2 = Math.min(w - 1, mxX + ox), by2 = Math.min(h - 1, mxY + oy);
+    if(bx > bx2 || by > by2) return; // fully off-canvas
+    const bw = bx2 - bx + 1, bh = by2 - by + 1;
+    const out = destCtx.getImageData(bx, by, bw, bh);
     const od = out.data;
     for(let vi=0; vi<mw*mh; vi++){
       const m = mask[vi];
       if(!m) continue;
       const x = (vi % mw) + ox, y = ((vi - (vi % mw)) / mw) + oy;
-      if(x<0 || x>=w || y<0 || y>=h) continue;
-      const i = (y*w + x)*4;
+      if(x < bx || x > bx2 || y < by || y > by2) continue;
+      const i = ((y - by) * bw + (x - bx)) * 4;
       const da = od[i+3];
       // Guarded pixels are warped LINE pixels — the fill must always go
       // UNDERNEATH them, even where the mask's core lands on the line.
@@ -4017,7 +4034,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
         od[i+3] = 255;
       }
     }
-    destCtx.putImageData(out,0,0);
+    destCtx.putImageData(out, bx, by);
   }
 
   // ---- Mask persistence (run-length encoding) ----
@@ -5302,6 +5319,22 @@ showLayerMenu(ev.clientX, ev.clientY, [
         result.push({ type:'layerRecolor', color:a.color, li });
       }
     });
+    // ---- layer/folder META ----
+    // The recipe used to store only flat layer indices, so loading lost the
+    // folder grouping and (because indices were absolute stack positions)
+    // spawned EMPTY layers for every unused slot. Record exactly which
+    // layers are used, their names, and their folder membership.
+    const usedLis = [...new Set(
+      result.map(a => a.li || 0).concat(result.flatMap(a => a.sli || []))
+    )].sort((x, y) => x - y);
+    const layersMeta = usedLis.map(li => {
+      const l = layers[li];
+      return { li, name: l ? l.name : ('LAYER ' + (li + 1)), f: (l && l.folderId) ? l.folderId : 0 };
+    });
+    const foldersMeta = folders
+      .filter(f => layersMeta.some(m => m.f === f.id))
+      .map(f => ({ id: f.id, name: f.name }));
+    result.unshift({ type: 'meta', v: 1, layers: layersMeta, folders: foldersMeta });
     return result;
   }
 
@@ -5496,26 +5529,53 @@ showLayerMenu(ev.clientX, ev.clientY, [
       const offY = Math.round((ch - oh) / 2);
 
       if(obj.recipe && obj.recipe.length > 0){
-        // Load into BRAND-NEW layers appended on top \u2014 never merge into the
-        // layers already on the canvas. The recipe's own layer indices (li)
-        // are remapped onto these fresh layers, and they're grouped in a
-        // folder so the loaded object stays a tidy, movable unit.
-        const maxLi = obj.recipe.reduce((m,a)=> Math.max(m, a.li || 0, ...(a.sli || [0])), 0);
+        // Load into BRAND-NEW layers appended on top (never merged into the
+        // layers already on the canvas).
+        const meta = obj.recipe.find(a => a && a.type === 'meta');
+        // Only the layer indices ACTUALLY USED get a layer (no more empty
+        // layers for unused stack slots).
+        const usedLis = [...new Set(
+          obj.recipe.filter(a => a.type !== 'meta')
+            .map(a => a.li || 0)
+            .concat(obj.recipe.flatMap(a => a.sli || []))
+        )].sort((x, y) => x - y);
+        const liMap = new Map();   // recipe li -> fresh layer
         const fresh = [];
-        for(let i=0; i<=maxLi; i++){
-          const nl = createLayer(`OBJ-${String(obj.id).padStart(2,'0')}${maxLi>0 ? ' L'+(i+1) : ''}`);
+        const tag = `OBJ-${String(obj.id).padStart(2,'0')}`;
+        usedLis.forEach((li, k) => {
+          const m = meta && meta.layers ? meta.layers.find(x => x.li === li) : null;
+          const nl = createLayer(m && m.name ? m.name : `${tag}${usedLis.length > 1 ? ' L' + (k+1) : ''}`);
           layers.push(nl);
           fresh.push(nl);
+          liMap.set(li, nl);
+        });
+        if(meta && Array.isArray(meta.folders) && meta.folders.length){
+          // Recreate the ORIGINAL folder structure (names + membership).
+          const fMap = new Map();
+          meta.folders.forEach(mf => {
+            const nf = { id: ++folderIdCounter, name: mf.name || 'FOLDER' };
+            folders.push(nf);
+            fMap.set(mf.id, nf);
+          });
+          meta.layers.forEach(ml => {
+            if(ml.f && fMap.has(ml.f) && liMap.has(ml.li)){
+              liMap.get(ml.li).folderId = fMap.get(ml.f).id;
+            }
+          });
+          activeFolderId = null;
+        } else {
+          // Old recipes without meta: keep them tidy in one OBJ folder.
+          const grpF = { id: ++folderIdCounter, name: tag };
+          folders.push(grpF);
+          fresh.forEach(l => { l.folderId = grpF.id; });
+          activeFolderId = grpF.id;
         }
-        const grpF = { id: ++folderIdCounter, name: `OBJ-${String(obj.id).padStart(2,'0')}` };
-        folders.push(grpF);
-        fresh.forEach(l=>{ l.folderId = grpF.id; });
-        activeLayerId = fresh[fresh.length-1].id;
-        activeFolderId = grpF.id;
-        const layerIdFor = a => fresh[Math.min(a.li || 0, fresh.length-1)].id;
+        activeLayerId = fresh[fresh.length - 1].id;
+        const layerIdFor = a => (liMap.get(a.li || 0) || fresh[fresh.length - 1]).id;
         const loadStart = actions.length; // bake erasers after the whole batch lands
         obj.recipe.forEach(a=>{
-          if(a.type === 'stroke'){
+          if(a.type === 'meta'){ /* structural only */ }
+          else if(a.type === 'stroke'){
             actions.push({
               type:'stroke', id:++actionCounter, tool:a.tool, color:a.color, width:a.width,
               texture: a.texture || a.tx || 'smooth',
@@ -5530,7 +5590,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
               color:a.color, tolerance:a.tolerance, layer: layerIdFor(a)
             };
             if(a.sli && a.sli.length){
-              act.src = [...new Set(a.sli.map(i => fresh[Math.min(i, fresh.length-1)].id))];
+              act.src = [...new Set(a.sli.map(i => (liMap.get(i) || fresh[fresh.length-1]).id))];
             }
             if(a.m){ act.m = a.m; act.ox = (a.ox||0) + offX; act.oy = (a.oy||0) + offY;
                      if(a.mw){ act.mw = a.mw; act.mh = a.mh; } }
@@ -6530,6 +6590,9 @@ showLayerMenu(ev.clientX, ev.clientY, [
 
   function autosaveNow(){
     if(replaying) return;
+    // Serializing every point + a synchronous localStorage write can stutter
+    // the pen on complex drawings — never do it mid-stroke; retry after.
+    if(typeof drawing !== 'undefined' && drawing){ scheduleAutosave(); return; }
     try {
       if(actions.length === 0){ localStorage.removeItem(AUTOSAVE_KEY); return; }
       localStorage.setItem(AUTOSAVE_KEY, serializeStateForAutosave());
@@ -6543,7 +6606,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
 
   function scheduleAutosave(){
     if(autosaveTimer) return;
-    autosaveTimer = setTimeout(()=>{ autosaveTimer = null; autosaveNow(); }, 1000);
+    autosaveTimer = setTimeout(()=>{ autosaveTimer = null; autosaveNow(); }, 2500);
   }
 
   function restoreAutosave(){
