@@ -5847,6 +5847,13 @@ showLayerMenu(ev.clientX, ev.clientY, [
       }
       // 2) Fold erasers into the stroke geometry.
       const bakedRecipe = bakeErasers(recolored, a => a.li || 0);
+      // Carry the structural META through to the variation's recipe —
+      // without it, saved variations collapsed into a single folder on load.
+      const srcMeta = obj.recipe.find(a => a && a.type === 'meta');
+      if(srcMeta){
+        redrawnActions.push({ type:'meta', v: srcMeta.v || 1,
+                              layers: srcMeta.layers, folders: srcMeta.folders });
+      }
       // 3) Guard canvas: marks where warped LINES have been painted, so a
       //    warped fill's core (REPLACE rule) can never devour line pixels
       //    when the grid-sampled mask warp lands a couple px off the
