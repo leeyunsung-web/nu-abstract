@@ -679,7 +679,7 @@
         <div class="palette-label"><span>NAVIGATION</span><span id="navInfo">100% · 0°</span></div>
         <div class="nav-row">
           <button id="zoomOutBtn" title="Zoom out">−</button>
-          <input type="range" id="zoomSlider" min="20" max="400" value="100" title="View zoom">
+          <input type="range" id="zoomSlider" min="20" max="600" value="100" title="View zoom">
           <button id="zoomInBtn" title="Zoom in">＋</button>
         </div>
         <div class="nav-row">
@@ -781,7 +781,7 @@
         </div>
         <div id="traceControls">
           <div class="tc-title">REFERENCE — ADJUST</div>
-          <div class="tc-row"><span>SCALE</span><input type="range" id="traceScale" min="20" max="300" value="100"><span class="tc-val" id="traceScaleVal">1.0x</span></div>
+          <div class="tc-row"><span>SCALE</span><input type="range" id="traceScale" min="20" max="600" value="100"><span class="tc-val" id="traceScaleVal">1.0x</span></div>
           <div class="tc-row"><span>ROTATE</span><input type="range" id="traceRotate" min="-180" max="180" value="0"><span class="tc-val" id="traceRotateVal">0°</span></div>
           <div class="tc-row"><span>OPACITY</span><input type="range" id="traceOpacity2" min="0" max="100" value="30"><span class="tc-val" id="traceOpacityVal">30%</span></div>
           <div class="tc-btns">
@@ -2371,11 +2371,54 @@ showLayerMenu(ev.clientX, ev.clientY, [
     const b = $('eyedropperBtn'); if(b) b.classList.add('active');
     toast('Eyedropper: click canvas to pick a color.');
   }
+  // Sample the TRACE reference image at a canvas-space point (px, py in
+  // drawCanvas pixels). Replicates the CSS layout (object-fit: contain,
+  // centered) and the live transform (translate → rotate → scale, origin
+  // center) on an offscreen canvas, then reads the pixel. Returns
+  // [r,g,b] at FULL opacity (the source image color, not the faded
+  // on-screen overlay), or null if no trace / transparent pixel.
+  function sampleTraceColorAt(px, py){
+    if(!traceState.loaded || !traceImg.naturalWidth) return null;
+    if(traceImg.style.display === 'none' || traceImg.style.visibility === 'hidden') return null;
+    const W = drawCanvas.width, H = drawCanvas.height;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const natW = traceImg.naturalWidth, natH = traceImg.naturalHeight;
+    const fit = Math.min(W / natW, H / natH);          // object-fit: contain
+    const drawW = natW * fit, drawH = natH * fit;
+    // traceState.x/y are CSS px in the on-screen frame — convert to canvas px
+    const frameW = traceImg.parentElement.getBoundingClientRect().width || W;
+    const k = W / frameW;
+    ctx.translate(W / 2 + traceState.x * k, H / 2 + traceState.y * k);
+    ctx.rotate(traceState.rotate * Math.PI / 180);
+    ctx.scale(traceState.scale, traceState.scale);
+    ctx.drawImage(traceImg, -drawW / 2, -drawH / 2, drawW, drawH);
+    px = Math.max(0, Math.min(W - 1, Math.floor(px)));
+    py = Math.max(0, Math.min(H - 1, Math.floor(py)));
+    const d = ctx.getImageData(px, py, 1, 1).data;
+    if(d[3] < 8) return null;
+    return [d[0], d[1], d[2]];
+  }
+
   function pickColorAt(px, py){
     px = Math.max(0, Math.min(drawCanvas.width-1, Math.floor(px)));
     py = Math.max(0, Math.min(drawCanvas.height-1, Math.floor(py)));
     const d = dctx.getImageData(px, py, 1, 1).data;
-    if(d[3] < 8){ toast('Picked empty pixel (no color).'); return; }
+    if(d[3] < 8){
+      // Nothing drawn here — fall back to the TRACE reference image so
+      // colors can be picked straight from the reference.
+      const t = sampleTraceColorAt(px, py);
+      if(t){
+        const hex = rgbToHex(t[0], t[1], t[2]);
+        applyColor(hex);
+        document.querySelectorAll('.palette-cell.selected').forEach(c=>c.classList.remove('selected'));
+        toast(`Picked ${hex.toUpperCase()} (trace)`);
+        return;
+      }
+      toast('Picked empty pixel (no color).');
+      return;
+    }
     const hex = rgbToHex(d[0], d[1], d[2]);
     applyColor(hex);
     document.querySelectorAll('.palette-cell.selected').forEach(c=>c.classList.remove('selected'));
@@ -3669,11 +3712,11 @@ showLayerMenu(ev.clientX, ev.clientY, [
     let deg = Math.round(viewRot * 180 / Math.PI) % 360;
     if(deg > 180) deg -= 360; if(deg < -180) deg += 360;
     $('navInfo').textContent = `${Math.round(viewZoom*100)}% · ${deg}°`;
-    $('zoomSlider').value = Math.max(20, Math.min(400, Math.round(viewZoom*100)));
+    $('zoomSlider').value = Math.max(20, Math.min(600, Math.round(viewZoom*100)));
     updateNavPreview();
   }
   function setViewZoom(z){
-    viewZoom = Math.max(0.2, Math.min(4, z));
+    viewZoom = Math.max(0.2, Math.min(6, z));
     applyViewTransform();
   }
   function resetView(){
