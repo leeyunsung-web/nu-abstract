@@ -3132,6 +3132,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
       el.className = 'gh-item';
       // Default unchecked
       el.dataset.idx = idx;
+      el._ghFile = f; // stable reference — survives deletions (no index remap)
 
       const img = document.createElement('img');
       img.src = f.downloadUrl; 
@@ -3151,8 +3152,75 @@ showLayerMenu(ev.clientX, ev.clientY, [
         el.classList.toggle('selected');
       });
 
+      // Right-click → DELETE from the online archive (MASTER only; guests
+      // get no custom menu at all).
+      el.addEventListener('contextmenu', e => {
+        if(userRole !== 'master') return;
+        e.preventDefault();
+        showGhDeleteCtxMenu(e.clientX, e.clientY, f, el);
+      });
+
       grid.appendChild(el);
     });
+  }
+
+  // ==================== ONLINE ARCHIVE DELETE (master only) ====================
+  // A small context menu on the ONLINE ARCHIVE LOAD items. DELETE removes
+  // the file from the GitHub repository (fresh-sha lookup via mgrDeleteFile)
+  // and drops it from the list — direct, no confirmation dialogs.
+  let ghDelMenuEl = null, ghDelTarget = null;
+  function ensureGhDeleteCtxMenu(){
+    if(ghDelMenuEl) return ghDelMenuEl;
+    const m = document.createElement('div');
+    m.id = 'ghDeleteCtxMenu';
+    m.style.cssText = 'position:fixed; z-index:500; display:none; background:var(--panel, #fff);' +
+      'border:1px solid var(--border, #ccc); border-radius:10px; padding:6px;' +
+      'box-shadow:0 10px 26px rgba(0,0,0,0.14); min-width:170px;';
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-sm btn-danger btn-full';
+    btn.textContent = '✕ DELETE FROM ARCHIVE';
+    btn.title = 'Permanently delete this file from the online archive (master only)';
+    btn.addEventListener('click', async ()=>{
+      const t = ghDelTarget;
+      hideGhDeleteCtxMenu();
+      if(!t) return;
+      if(userRole !== 'master'){ toast('Master access required.'); return; }
+      const { f, el } = t;
+      el.style.opacity = '0.4';
+      el.style.pointerEvents = 'none';
+      try {
+        await mgrDeleteFile(f.path, null, `Delete ${f.name}`);
+        const i = ghPendingFiles.indexOf(f);
+        if(i > -1) ghPendingFiles.splice(i, 1);
+        el.remove();
+        toast(`Deleted ${f.name} from the archive.`);
+      } catch(e){
+        console.error(e);
+        el.style.opacity = '';
+        el.style.pointerEvents = '';
+        toast('Delete failed: ' + (e.message || e));
+      }
+    });
+    m.appendChild(btn);
+    document.body.appendChild(m);
+    document.addEventListener('pointerdown', ev => { if(!m.contains(ev.target)) hideGhDeleteCtxMenu(); }, true);
+    window.addEventListener('scroll', hideGhDeleteCtxMenu, true);
+    window.addEventListener('resize', hideGhDeleteCtxMenu);
+    document.addEventListener('keydown', ev => { if(ev.key === 'Escape') hideGhDeleteCtxMenu(); });
+    ghDelMenuEl = m;
+    return m;
+  }
+  function showGhDeleteCtxMenu(x, y, f, el){
+    const m = ensureGhDeleteCtxMenu();
+    ghDelTarget = { f, el };
+    m.style.display = 'block';
+    const r = m.getBoundingClientRect();
+    m.style.left = Math.min(x, window.innerWidth  - r.width  - 8) + 'px';
+    m.style.top  = Math.min(y, window.innerHeight - r.height - 8) + 'px';
+  }
+  function hideGhDeleteCtxMenu(){
+    if(ghDelMenuEl) ghDelMenuEl.style.display = 'none';
+    ghDelTarget = null;
   }
 
   $('ghLoadCancel').addEventListener('click', () => {
@@ -3162,15 +3230,15 @@ showLayerMenu(ev.clientX, ev.clientY, [
 
   $('ghLoadSubmit').addEventListener('click', async () => {
     const selectedNodes = document.querySelectorAll('#ghLoadList .gh-item.selected');
-    const selectedIdx = Array.from(selectedNodes).map(n => parseInt(n.dataset.idx));
-    
-    if(selectedIdx.length === 0){
+    const picked = Array.from(selectedNodes).map(n => n._ghFile).filter(Boolean);
+
+    if(picked.length === 0){
       toast('No items selected.');
       return;
     }
 
     $('ghLoadModal').classList.remove('show');
-    const filesToLoad = selectedIdx.map(i => ghPendingFiles[i]);
+    const filesToLoad = picked;
     ghPendingFiles = [];
 
     toast(`Downloading ${filesToLoad.length} images…`);
