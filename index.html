@@ -946,11 +946,30 @@
 
 <div class="toast" id="toast"></div>
 
+<style>
+  /* ONLINE ARCHIVE LOAD — folder tiles (same two-line title/date idea as the manager) */
+  .gh-folder {
+    cursor: pointer; border: 1px solid var(--border-soft); border-radius: 10px;
+    background: var(--panel-alt); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 4px; min-height: 92px;
+    padding: 10px 8px; box-sizing: border-box; transition: border-color 0.15s, transform 0.15s;
+  }
+  .gh-folder:hover { border-color: var(--ink); transform: translateY(-1px); }
+  .gh-folder .gh-folder-title {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: 0.5px;
+    color: var(--ink); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .gh-folder .gh-folder-date { font-family: var(--font-mono); font-size: 10px; color: var(--ink-dim); }
+  .gh-item.gh-loaded { opacity: 0.35; pointer-events: none; }
+</style>
+
 <!-- GitHub Load Modal (unchecked by default, 6-column grid) -->
 <div class="modal-backdrop" id="ghLoadModal">
   <div class="modal wide">
     <h2>ONLINE ARCHIVE LOAD</h2>
-    <p class="hint">Found objects in the repository. Already loaded files are excluded.<br>Select desired items and click [LOAD].</p>
+    <p class="hint">Browse the archive folder by folder. Select items and click [LOAD] — already loaded files are dimmed.</p>
+    <div id="ghLoadCrumb" style="display:flex; align-items:center; gap:8px; margin:0 0 10px;
+         font-family:var(--font-mono); font-size:11px; color:var(--ink-dim);"></div>
     <div class="gh-load-grid" id="ghLoadList"></div>
     <div class="modal-btns">
       <button class="btn btn-ghost" id="ghLoadCancel">CANCEL</button>
@@ -3506,66 +3525,92 @@ showLayerMenu(ev.clientX, ev.clientY, [
     await scanGitHubAndShowModal();
   });
 
+  // Folder-by-folder browser (like the ARCHIVE MANAGER): shows the current
+  // path's FOLDERS first — date folders with their custom title over the
+  // date — then the files of that folder only. No recursive flat dump.
+  let ghLoadPath = '';
   async function scanGitHubAndShowModal(){
-    const pathPrefix = (ghConfig.path || 'gallery').replace(/^\/+|\/+$/g,'');
-    const files = [];
-
-    async function walk(path){
-      const url = `https://api.github.com/repos/${ghConfig.owner}/${ghConfig.repo}/contents/${encodeURI(path)}?ref=${encodeURIComponent(ghConfig.branch || 'main')}`;
-      const res = await fetch(url, {
-        headers: {
-          'Accept': 'application/vnd.github+json',
-          'Authorization': `Bearer ${ghConfig.token}`,
-          'X-GitHub-Api-Version': '2022-11-28'
-        }
-      });
-      if(!res.ok){
-        if(res.status === 404) return;
-        const err = await res.json().catch(()=>({}));
-        throw new Error(`API ${res.status}: ${err.message || res.statusText}`);
-      }
-      const items = await res.json();
-      if(!Array.isArray(items)) return;
-      for(const it of items){
-        if(it.type === 'dir') await walk(it.path);
-        else if(it.type === 'file' && /\.(png|jpe?g|webp)$/i.test(it.name)){
-          if(!loadedFilenames.has(it.name)) {
-            files.push({ name: it.name, downloadUrl: it.download_url, path: it.path });
-          }
-        }
-      }
-    }
-
-    try {
-      await walk(pathPrefix);
-    } catch(e){
-      console.error(e);
-      toast('Scan Failed: ' + e.message);
-      return;
-    }
-
-    if(files.length === 0){
-      toast('No new images to load (all already added).');
-      return;
-    }
-
-    ghPendingFiles = files;
-    renderGhLoadModal();
+    ghLoadPath = (ghConfig.path || 'gallery').replace(/^\/+|\/+$/g,'');
     $('ghLoadModal').classList.add('show');
+    await renderGhLoadDir();
   }
 
-  function renderGhLoadModal() {
+  async function ghLoadList(path){
+    const url = `https://api.github.com/repos/${ghConfig.owner}/${ghConfig.repo}/contents/${encodeURI(path)}?ref=${encodeURIComponent(ghConfig.branch || 'main')}&t=${Date.now()}`;
+    const res = await fetch(url, {
+      headers: {
+        'Accept': 'application/vnd.github+json',
+        'Authorization': `Bearer ${ghConfig.token}`,
+        'X-GitHub-Api-Version': '2022-11-28'
+      },
+      cache: 'no-store'
+    });
+    if(res.status === 404) return [];
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      throw new Error(`API ${res.status}: ${err.message || res.statusText}`);
+    }
+    const items = await res.json();
+    return Array.isArray(items) ? items : [];
+  }
+
+  async function renderGhLoadDir(){
     const grid = $('ghLoadList');
+    const crumb = $('ghLoadCrumb');
+    const root = (ghConfig.path || 'gallery').replace(/^\/+|\/+$/g,'');
+    // Breadcrumb + UP
+    crumb.innerHTML = '';
+    if(ghLoadPath !== root){
+      const up = document.createElement('button');
+      up.className = 'btn btn-sm btn-ghost';
+      up.textContent = '↑ UP';
+      up.addEventListener('click', ()=>{
+        ghLoadPath = ghLoadPath.split('/').slice(0, -1).join('/') || root;
+        renderGhLoadDir();
+      });
+      crumb.appendChild(up);
+    }
+    const pathEl = document.createElement('span');
+    pathEl.textContent = '/' + ghLoadPath;
+    crumb.appendChild(pathEl);
+
+    grid.innerHTML = '<p class="empty-hint">Loading…</p>';
+    let items;
+    try { items = await ghLoadList(ghLoadPath); }
+    catch(e){
+      console.error(e);
+      grid.innerHTML = `<p class="empty-hint">Scan failed: ${escMgr(e.message || String(e))}</p>`;
+      return;
+    }
+    const dirs = items.filter(i=>i.type==='dir').sort((a,b)=>b.name.localeCompare(a.name)); // newest date first
+    const files = items.filter(i=>i.type==='file' && /\.(png|jpe?g|webp)$/i.test(i.name))
+                       .sort((a,b)=>a.name.localeCompare(b.name));
     grid.innerHTML = '';
-    ghPendingFiles.forEach((f, idx) => {
+    ghPendingFiles = [];
+
+    // FOLDERS first — two-line [title | FOLDER] over [date], like the manager
+    dirs.forEach(d=>{
+      const fn = parseMgrFolderName(d.name);
+      const tile = document.createElement('div');
+      tile.className = 'gh-folder';
+      tile.title = 'Open ' + d.name;
+      tile.innerHTML = `<div class="gh-folder-title">${escMgr(fn.label || 'FOLDER')}</div>
+        <div class="gh-folder-date">${escMgr(fn.date || '')}</div>`;
+      tile.addEventListener('click', ()=>{ ghLoadPath = d.path; renderGhLoadDir(); });
+      grid.appendChild(tile);
+    });
+
+    // FILES of this folder only
+    files.forEach(f=>{
+      const alreadyLoaded = loadedFilenames.has(f.name);
+      const fileRef = { name: f.name, downloadUrl: f.download_url, path: f.path };
+      if(!alreadyLoaded) ghPendingFiles.push(fileRef);
       const el = document.createElement('div');
-      el.className = 'gh-item';
-      // Default unchecked
-      el.dataset.idx = idx;
-      el._ghFile = f; // stable reference — survives deletions (no index remap)
+      el.className = 'gh-item' + (alreadyLoaded ? ' gh-loaded' : '');
+      el._ghFile = fileRef; // stable reference — survives deletions
 
       const img = document.createElement('img');
-      img.src = withArchiveVer(f.downloadUrl); // versioned → overwrites show fresh
+      img.src = withArchiveVer(f.download_url); // versioned → overwrites show fresh
       img.loading = 'lazy';
       el.appendChild(img);
 
@@ -3575,23 +3620,29 @@ showLayerMenu(ev.clientX, ev.clientY, [
 
       const name = document.createElement('div');
       name.className = 'gh-item-name';
-      name.textContent = f.name;
+      name.textContent = f.name + (alreadyLoaded ? ' ✓' : '');
       el.appendChild(name);
 
-      el.addEventListener('click', () => {
-        el.classList.toggle('selected');
-      });
+      if(!alreadyLoaded){
+        el.addEventListener('click', () => {
+          el.classList.toggle('selected');
+        });
+      }
 
       // Right-click → DELETE from the online archive (MASTER only; guests
       // get no custom menu at all).
       el.addEventListener('contextmenu', e => {
         if(userRole !== 'master') return;
         e.preventDefault();
-        showGhDeleteCtxMenu(e.clientX, e.clientY, f, el);
+        showGhDeleteCtxMenu(e.clientX, e.clientY, fileRef, el);
       });
 
       grid.appendChild(el);
     });
+
+    if(!dirs.length && !files.length){
+      grid.innerHTML = '<p class="empty-hint">This folder is empty.</p>';
+    }
   }
 
   // ==================== ONLINE ARCHIVE DELETE (master only) ====================
@@ -3949,8 +4000,12 @@ showLayerMenu(ev.clientX, ev.clientY, [
       // Date folders render as [custom title | FOLDER] over [date]. RENAME
       // edits only the title — the date line underneath never changes.
       const fn = parseMgrFolderName(d.name);
-      const title = escMgr(fn.date ? (fn.label || 'FOLDER') : 'FOLDER');
-      const sub = escMgr(fn.date ? fn.date : d.name);
+      // ANY folder's custom name shows as the TITLE line:
+      //   "2026-07-20_blood" → blood / 2026-07-20
+      //   "blood"            → blood / (no date line)
+      //   "2026-07-20"       → FOLDER / 2026-07-20
+      const title = escMgr(fn.label || 'FOLDER');
+      const sub = escMgr(fn.date || '');
       node.innerHTML = `<button class="node-del" title="Delete folder">×</button>
         <button class="node-rename" title="Rename folder title">RENAME</button>
         <div class="node-icon" style="max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${title}</div><div class="node-name">${sub}</div>`;
@@ -4102,7 +4157,8 @@ showLayerMenu(ev.clientX, ev.clientY, [
       const label = input.trim().replace(/[\/\\?%*:|"<>]/g,'-');
       clean = label ? `${fn.date}_${label}` : fn.date;
     } else {
-      const input = prompt('Rename folder:', oldName);
+      // Non-date folder: the whole name IS the title shown on the card.
+      const input = prompt('Folder name:', oldName);
       if(input === null) return;
       clean = input.trim().replace(/[\/\\?%*:|"<>]/g,'-');
     }
