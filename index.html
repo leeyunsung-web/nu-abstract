@@ -2893,11 +2893,13 @@ showLayerMenu(ev.clientX, ev.clientY, [
     });
   }
 
-  async function commitToGitHub(blob, filename, dateFolder){
+  async function commitToGitHub(blob, filename, dateFolder, overridePath){
     if(!ghConfig || !ghConfig.token) throw new Error('No GitHub config.');
     const { owner, repo, branch, path, token } = ghConfig;
     const pathPrefix = (path || 'gallery').replace(/^\/+|\/+$/g,'');
-    const fullPath = `${pathPrefix}/${dateFolder}/${filename}`;
+    // overridePath: commit to this EXACT repo path (⤓ SAVE overwriting the
+    // archived original of an online-loaded sample) instead of today's folder.
+    const fullPath = overridePath || `${pathPrefix}/${dateFolder}/${filename}`;
     const base64 = await blobToBase64(blob);
 
     const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURI(fullPath)}`;
@@ -2981,10 +2983,11 @@ showLayerMenu(ev.clientX, ev.clientY, [
       results.push(`Downloaded: ${filename}`);
     }
 
+    let ghPath = (reuse && reuse.ghPath) || null;
     if(ghConfig && ghConfig.token){
       try {
-        const path = await commitToGitHub(blob, filename, dateFolder);
-        results.push(`GitHub: ${path}`);
+        ghPath = await commitToGitHub(blob, filename, dateFolder, reuse && reuse.ghPath);
+        results.push(`GitHub: ${ghPath}`);
       } catch(e){
         console.error(e);
         results.push(`GitHub Failed: ${e.message}`);
@@ -2992,10 +2995,10 @@ showLayerMenu(ev.clientX, ev.clientY, [
     }
     toast(results.join(' · '));
     updateFolderChip();
-    return { filename, dateFolder };
+    return { filename, dateFolder, ghPath };
   }
 
-  async function loadImageFile(file, sourceUrl){
+  async function loadImageFile(file, sourceUrl, ghPath){
     if(!file.type.startsWith('image/')) return null;
     if(loadedFilenames.has(file.name)) return null;
 
@@ -3026,7 +3029,8 @@ showLayerMenu(ev.clientX, ev.clientY, [
             return a;
           });
         }
-        addObject(finalC, recipe, file.name, sourceUrl || null); // online origin → right-click DOWNLOAD
+        const obj = addObject(finalC, recipe, file.name, sourceUrl || null); // online origin → right-click DOWNLOAD
+        if(ghPath) obj.ghPath = ghPath; // exact archive path → ⤓ SAVE overwrites it in place
         resolve(finalC);
       };
       img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image Load Failed: '+file.name)); };
@@ -3096,7 +3100,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
         if(it.type === 'dir') await walk(it.path);
         else if(it.type === 'file' && /\.(png|jpe?g|webp)$/i.test(it.name)){
           if(!loadedFilenames.has(it.name)) {
-            files.push({ name: it.name, downloadUrl: it.download_url });
+            files.push({ name: it.name, downloadUrl: it.download_url, path: it.path });
           }
         }
       }
@@ -3178,7 +3182,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
         if(!res.ok) throw new Error('HTTP ' + res.status);
         const blob = await res.blob();
         const file = new File([blob], f.name, { type: blob.type || 'image/png' });
-        await loadImageFile(file, f.downloadUrl);
+        await loadImageFile(file, f.downloadUrl, f.path);
         ok++;
         if((i + 1) % 5 === 0 || i === filesToLoad.length - 1){
           toast(`Loading… ${i + 1}/${filesToLoad.length}`);
@@ -6329,6 +6333,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
     try {
       const saved = await savePatternToFolder(cropped, obj.id, recipe);
       if(saved){ obj.filename = saved.filename; obj.saveFolder = saved.dateFolder;
+                 if(saved.ghPath) obj.ghPath = saved.ghPath;
                  loadedFilenames.add(saved.filename); }
     } catch (err) {
       console.error(err);
@@ -6366,9 +6371,12 @@ showLayerMenu(ev.clientX, ev.clientY, [
     renderComposition();
     toast(`Saved over OBJ-${String(target.id).padStart(2,'0')} (${cropped.width}×${cropped.height})`);
     try {
-      const reuse = target.filename ? { filename: target.filename, dateFolder: target.saveFolder } : null;
+      const reuse = (target.filename || target.ghPath)
+        ? { filename: target.filename, dateFolder: target.saveFolder, ghPath: target.ghPath }
+        : null;
       const saved = await savePatternToFolder(cropped, target.id, recipe, reuse);
       if(saved){ target.filename = saved.filename; target.saveFolder = saved.dateFolder;
+                 if(saved.ghPath) target.ghPath = saved.ghPath;
                  loadedFilenames.add(saved.filename); }
     } catch (err) {
       console.error(err);
