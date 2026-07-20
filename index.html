@@ -802,6 +802,7 @@
       <div class="history-select" style="display:flex; gap:6px; margin-top:-4px;">
         <button class="tool-btn" id="undoBtn" title="Ctrl+Z">↶ UNDO</button>
         <button class="tool-btn" id="redoBtn" title="Ctrl+Shift+Z">↷ REDO</button>
+        <button class="tool-btn" id="saveObjBtn" title="Ctrl+S — overwrite the SOURCE sample (the one loaded via TO DRAWING / live edit) with the current drawing">⤓ SAVE</button>
         <button class="tool-btn tool-clear-btn" id="clearDrawBtn">RESET</button>
       </div>
       <div class="tool-row" id="paperRow" style="display:none;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px;">
@@ -1046,6 +1047,7 @@
   const placedItems = []; 
   let selectedItemIdx = null;
   let liveEditTarget = null; // object currently live-linked to the drawing canvas
+  let loadedSourceObj = null; // sample last loaded via TO DRAWING — the ⤓ SAVE target
   let isDraggingItem = false;
   let dragStartMouse = { x: 0, y: 0 };
   let dragStartItemPos = { x: 0, y: 0 };
@@ -2381,6 +2383,10 @@ showLayerMenu(ev.clientX, ev.clientY, [
         if(e.shiftKey) { $('redoBtn').click(); }
         else { $('undoBtn').click(); }
       }
+      if(e.key.toLowerCase() === 's') {
+        e.preventDefault(); // never the browser's save-page dialog
+        $('saveObjBtn').click();
+      }
     } else {
       const k = e.key.toLowerCase();
       if(k === 'b') { document.querySelector('[data-tool="brush"]').click(); }
@@ -2900,6 +2906,18 @@ showLayerMenu(ev.clientX, ev.clientY, [
       content: base64,
       branch: branch || 'main'
     };
+    // Overwrite support: the contents API rejects a PUT on an existing path
+    // unless its current sha is included (422) — look it up first.
+    try {
+      const head = await fetch(url + `?ref=${encodeURIComponent(branch || 'main')}&t=${Date.now()}`, {
+        headers: { 'Accept': 'application/vnd.github+json', 'Authorization': `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' },
+        cache: 'no-store'
+      });
+      if(head.ok){
+        const j = await head.json().catch(()=>null);
+        if(j && j.sha){ body.sha = j.sha; body.message = `Update ${filename}`; }
+      }
+    } catch(e){ /* no sha → plain add */ }
     const res = await fetch(url, {
       method: 'PUT',
       headers: {
@@ -2933,11 +2951,14 @@ showLayerMenu(ev.clientX, ev.clientY, [
     return await res.json();
   }
 
-  async function savePatternToFolder(canvas, objId, recipe){
+  async function savePatternToFolder(canvas, objId, recipe, reuse){
     const now = new Date();
-    const dateFolder = todayFolderName(now);
+    // reuse = {filename, dateFolder} → OVERWRITE that exact file instead of
+    // minting a new name (the ⤓ SAVE button); otherwise a fresh name.
+    const dateFolder = (reuse && reuse.dateFolder) || todayFolderName(now);
     const roleTag = userRole === 'master' ? 'MASTER' : 'GUEST';
-    const filename = `pattern_${dateFolder}_${timeStamp(now)}_${roleTag}_OBJ-${pad2(objId)}.png`;
+    const filename = (reuse && reuse.filename)
+      || `pattern_${dateFolder}_${timeStamp(now)}_${roleTag}_OBJ-${pad2(objId)}.png`;
 
     // Recipe (drawing history) is embedded into the PNG itself.
     const blob = await canvasToRecipeBlob(canvas, recipe);
@@ -2971,6 +2992,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
     }
     toast(results.join(' · '));
     updateFolderChip();
+    return { filename, dateFolder };
   }
 
   async function loadImageFile(file){
@@ -5696,6 +5718,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
 
 
   $('clearDrawBtn').addEventListener('click', ()=>{
+    loadedSourceObj = null; // RESET ends the overwrite link
     if(replaying){ toast('Replaying — please wait.'); return; }
     liveEditTarget = null; // end live link — a reset must not blank the object
     actions.length = 0;
@@ -6029,6 +6052,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
   function loadSampleToDrawing(obj){
     if(!obj){ toast('Sample not found.'); return; }
     liveEditTarget = null;
+    loadedSourceObj = obj; // SAVE (⤓) overwrites this sample
     dctx.globalCompositeOperation = 'source-over';
     try {
       const cw = drawCanvas.width, ch = drawCanvas.height;
@@ -6221,11 +6245,54 @@ showLayerMenu(ev.clientX, ev.clientY, [
     const obj = addObject(cropped, recipe);
     toast(`Registered OBJ-${String(objCounter).padStart(2,'0')} (${cropped.width}×${cropped.height})`);
     liveEditTarget = null; // registering ends any live link before the canvas clears
+    loadedSourceObj = obj; // ⤓ SAVE now overwrites the object just registered
     actions.length = 0;
     redoStack.length = 0;
     clearStrokeSelection();
     try {
-      await savePatternToFolder(cropped, obj.id, recipe);
+      const saved = await savePatternToFolder(cropped, obj.id, recipe);
+      if(saved){ obj.filename = saved.filename; obj.saveFolder = saved.dateFolder;
+                 loadedFilenames.add(saved.filename); }
+    } catch (err) {
+      console.error(err);
+      toast('Save error: ' + (err.message || err));
+    }
+  });
+
+  // ==================== ⤓ SAVE (overwrite the source sample) ====================
+  // TO DRAWING → edit → SAVE updates the ORIGINAL sample in place (canvas,
+  // recipe, thumbnail, every placed copy on the composition) instead of
+  // registering a new object — and overwrites its stored PNG when the file
+  // identity is known (same name & folder, locally and on GitHub).
+  $('saveObjBtn').addEventListener('click', async ()=>{
+    if(replaying){ toast('Replaying — please wait.'); return; }
+    const target = liveEditTarget || loadedSourceObj;
+    if(!target){
+      toast('No source sample — load one with TO DRAWING first, or use REGISTER OBJECT.');
+      return;
+    }
+    if(target !== liveEditTarget && !objects.includes(target)){
+      loadedSourceObj = null;
+      toast('The source sample was removed — use REGISTER OBJECT instead.');
+      return;
+    }
+    const bbox = getBBox(drawCanvas);
+    if(!bbox){ toast('Canvas is empty — nothing to save.'); return; }
+    const cropped = cropCanvas(drawCanvas, bbox);
+    const recipe = buildRecipeForBBox(bbox);
+    target.canvas = cropped;
+    target.w = cropped.width;
+    target.h = cropped.height;
+    target._alphaData = undefined; // hit-testing must resample
+    target.recipe = recipe;
+    renderGallery();
+    renderComposition();
+    toast(`Saved over OBJ-${String(target.id).padStart(2,'0')} (${cropped.width}×${cropped.height})`);
+    try {
+      const reuse = target.filename ? { filename: target.filename, dateFolder: target.saveFolder } : null;
+      const saved = await savePatternToFolder(cropped, target.id, recipe, reuse);
+      if(saved){ target.filename = saved.filename; target.saveFolder = saved.dateFolder;
+                 loadedFilenames.add(saved.filename); }
     } catch (err) {
       console.error(err);
       toast('Save error: ' + (err.message || err));
