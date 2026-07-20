@@ -699,11 +699,11 @@
       <div class="tool-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
         <div class="range-row">
           <span>SIZE</span>
-          <input type="range" id="brushSize" min="1" max="60" value="8">
-          <span class="val" id="brushSizeVal">8</span>
+          <input type="range" id="brushSize" min="1" max="60" value="5">
+          <span class="val" id="brushSizeVal">5</span>
         </div>
         <div class="brush-preview-wrap">
-          <div class="brush-preview"><div id="brushPreviewDot" style="width:8px;height:8px;border-radius:0;"></div></div>
+          <div class="brush-preview"><div id="brushPreviewDot" style="width:5px;height:5px;border-radius:0;"></div></div>
         </div>
       </div>
       <div class="tool-row" style="display:flex;gap:10px;flex-wrap:wrap;">
@@ -716,14 +716,14 @@
       <div class="tool-row" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
         <span class="tex-label">TEXTURE</span>
         <div class="tex-group">
-          <button class="tex-btn active" data-tex="smooth" title="Clean anti-aliased line (default)">SMOOTH</button>
+          <button class="tex-btn" data-tex="smooth" title="Clean anti-aliased line">SMOOTH</button>
           <button class="tex-btn" data-tex="pencil" title="Paper-tooth pencil grain">PENCIL</button>
-          <button class="tex-btn" data-tex="spray" title="Scattered airbrush dots">SPRAY</button>
+          <button class="tex-btn active" data-tex="spray" title="Scattered airbrush dots (default)">SPRAY</button>
         </div>
         <div class="range-row">
           <span>GRAIN</span>
-          <input type="range" id="grain" min="0" max="100" value="50" title="Texture intensity">
-          <span class="val" id="grainVal">50</span>
+          <input type="range" id="grain" min="0" max="100" value="100" title="Texture intensity">
+          <span class="val" id="grainVal">100</span>
         </div>
         <button class="btn btn-sm btn-full" id="liveTexBtn"
           title="When ON, changing TEXTURE or GRAIN re-textures every stroke on the ACTIVE layer in real time (undoable)">◈ LIVE → ACTIVE LAYER: OFF</button>
@@ -2995,7 +2995,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
     return { filename, dateFolder };
   }
 
-  async function loadImageFile(file){
+  async function loadImageFile(file, sourceUrl){
     if(!file.type.startsWith('image/')) return null;
     if(loadedFilenames.has(file.name)) return null;
 
@@ -3026,7 +3026,8 @@ showLayerMenu(ev.clientX, ev.clientY, [
             return a;
           });
         }
-        addObject(finalC, recipe, file.name);
+        const obj = addObject(finalC, recipe, file.name);
+        if(sourceUrl) obj.downloadUrl = sourceUrl; // online origin → right-click DOWNLOAD
         resolve(finalC);
       };
       img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image Load Failed: '+file.name)); };
@@ -3178,7 +3179,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
         if(!res.ok) throw new Error('HTTP ' + res.status);
         const blob = await res.blob();
         const file = new File([blob], f.name, { type: blob.type || 'image/png' });
-        await loadImageFile(file);
+        await loadImageFile(file, f.downloadUrl);
         ok++;
         if((i + 1) % 5 === 0 || i === filesToLoad.length - 1){
           toast(`Loading… ${i + 1}/${filesToLoad.length}`);
@@ -3948,8 +3949,8 @@ showLayerMenu(ev.clientX, ev.clientY, [
   // (both variables stay in sync for compatibility with existing code)
   let strokeColor = '#1d1d1f';
   let fillColor = '#1d1d1f';
-  let brushSize = 8;
-  const toolSizes = { brush: 8, eraser: 24 }; // independent sizes per tool
+  let brushSize = 5;
+  const toolSizes = { brush: 5, eraser: 5 }; // independent sizes per tool
   let tolerance = 0; // Default 0 for crisp pixels
   let drawing = false;
   let currentAction = null;
@@ -5614,10 +5615,10 @@ showLayerMenu(ev.clientX, ev.clientY, [
   // STROKE's texture/grain exactly ("as selected for strokes") until the
   // user adjusts TEXTURE or GRAIN while the eraser is active — from then
   // on the eraser keeps its own independent settings, just like SIZE.
-  let currentTexture = 'smooth';
-  let currentGrain = 50;
-  const brushTex  = { tex: 'smooth', grain: 50 };
-  const eraserTex = { tex: 'smooth', grain: 50, customized: false };
+  let currentTexture = 'spray';
+  let currentGrain = 100;
+  const brushTex  = { tex: 'spray', grain: 100 };
+  const eraserTex = { tex: 'spray', grain: 100, customized: false };
   function texStateForActiveTool(){
     if(currentTool === 'eraser') return eraserTex.customized ? eraserTex : brushTex;
     return brushTex;
@@ -5974,6 +5975,73 @@ showLayerMenu(ev.clientX, ev.clientY, [
     toast(`OBJ-${String(obj.id).padStart(2,'0')} placed.`);
   }
 
+  // ==================== SAMPLE CONTEXT MENU (online samples) ====================
+  // Right-clicking the thumbnail of a sample loaded FROM ONLINE (GitHub)
+  // shows a DOWNLOAD action that saves the ORIGINAL file — recipe intact —
+  // to disk for offline use.
+  let sampleCtxMenuEl = null, sampleCtxObj = null;
+  function ensureSampleCtxMenu(){
+    if(sampleCtxMenuEl) return sampleCtxMenuEl;
+    const m = document.createElement('div');
+    m.id = 'sampleCtxMenu';
+    m.style.cssText = 'position:fixed; z-index:400; display:none; background:var(--panel, #fff);' +
+      'border:1px solid var(--border, #ccc); border-radius:10px; padding:6px;' +
+      'box-shadow:0 10px 26px rgba(0,0,0,0.14); min-width:160px;';
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-sm btn-full';
+    btn.textContent = '⬇ DOWNLOAD';
+    btn.title = 'Save the original online file (recipe embedded) to your computer';
+    btn.addEventListener('click', ()=>{
+      const obj = sampleCtxObj;
+      hideSampleCtxMenu();
+      if(obj) downloadSampleOriginal(obj);
+    });
+    m.appendChild(btn);
+    document.body.appendChild(m);
+    const hideOn = ev => { if(!m.contains(ev.target)) hideSampleCtxMenu(); };
+    document.addEventListener('pointerdown', hideOn, true);
+    window.addEventListener('scroll', hideSampleCtxMenu, true);
+    window.addEventListener('resize', hideSampleCtxMenu);
+    document.addEventListener('keydown', ev=>{ if(ev.key === 'Escape') hideSampleCtxMenu(); });
+    sampleCtxMenuEl = m;
+    return m;
+  }
+  function showSampleCtxMenu(x, y, obj){
+    const m = ensureSampleCtxMenu();
+    sampleCtxObj = obj;
+    m.style.display = 'block';
+    // Keep the menu inside the viewport
+    const r = m.getBoundingClientRect();
+    m.style.left = Math.min(x, window.innerWidth  - r.width  - 8) + 'px';
+    m.style.top  = Math.min(y, window.innerHeight - r.height - 8) + 'px';
+  }
+  function hideSampleCtxMenu(){
+    if(sampleCtxMenuEl) sampleCtxMenuEl.style.display = 'none';
+    sampleCtxObj = null;
+  }
+  async function downloadSampleOriginal(obj){
+    const fallbackName = obj.filename || `OBJ-${pad2(obj.id)}.png`;
+    toast('Downloading…');
+    try {
+      const res = await fetch(obj.downloadUrl, { cache:'no-store' });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const blob = await res.blob();
+      saveBlobViaDownload(blob, fallbackName);
+      toast(`Saved ${fallbackName} for offline use.`);
+    } catch(e){
+      console.error('original fetch failed', e);
+      // Origin unreachable → re-encode the in-app sample (recipe embedded).
+      try {
+        const blob = await canvasToRecipeBlob(obj.canvas, obj.recipe);
+        saveBlobViaDownload(blob, fallbackName);
+        toast('Original unreachable — saved the current sample (recipe embedded) instead.');
+      } catch(e2){
+        console.error(e2);
+        toast('Download failed: ' + (e.message || e));
+      }
+    }
+  }
+
   function renderGallery(){
     const grid = $('objectsGrid');
     grid.innerHTML = '';
@@ -5989,8 +6057,15 @@ showLayerMenu(ev.clientX, ev.clientY, [
       const thumbWrap = document.createElement('div');
       thumbWrap.className = 'obj-thumb';
       thumbWrap.appendChild(makeThumbCanvas(obj.canvas));
-      thumbWrap.title = 'Drag onto the composition to place this object';
+      thumbWrap.title = 'Drag onto the composition to place this object' +
+                        (obj.downloadUrl ? ' · right-click to download for offline use' : '');
       attachGalleryDrag(thumbWrap, obj);
+      if(obj.downloadUrl){
+        thumbWrap.addEventListener('contextmenu', e=>{
+          e.preventDefault();
+          showSampleCtxMenu(e.clientX, e.clientY, obj);
+        });
+      }
       card.appendChild(thumbWrap);
 
       const meta = document.createElement('div');
