@@ -3555,9 +3555,14 @@ showLayerMenu(ev.clientX, ev.clientY, [
     dirs.forEach(d=>{
       const node = document.createElement('div');
       node.className = 'mgr-node';
+      // Date folders render as [custom title | FOLDER] over [date]. RENAME
+      // edits only the title — the date line underneath never changes.
+      const fn = parseMgrFolderName(d.name);
+      const title = escMgr(fn.date ? (fn.label || 'FOLDER') : 'FOLDER');
+      const sub = escMgr(fn.date ? fn.date : d.name);
       node.innerHTML = `<button class="node-del" title="Delete folder">×</button>
-        <button class="node-rename" title="Rename folder">RENAME</button>
-        <div class="node-icon">FOLDER</div><div class="node-name">${d.name}</div>`;
+        <button class="node-rename" title="Rename folder title">RENAME</button>
+        <div class="node-icon" style="max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${title}</div><div class="node-name">${sub}</div>`;
       node.addEventListener('dblclick', ()=>{ mgrCurrentPath = d.path; refreshMgr(); });
       node.querySelector('.node-del').addEventListener('click', (ev)=>{ ev.stopPropagation(); deleteFolder(d.path, d.name); });
       node.querySelector('.node-rename').addEventListener('click', (ev)=>{ ev.stopPropagation(); renameFolder(d.path, d.name); });
@@ -3684,10 +3689,32 @@ showLayerMenu(ev.clientX, ev.clientY, [
   }
 
   // Rename a folder = copy all contents to new path, then delete the old tree.
+  // "2026-07-20"        → { date:'2026-07-20', label:'' }
+  // "2026-07-20_cats"   → { date:'2026-07-20', label:'cats' }
+  // anything else        → { date:'',           label:name }
+  function parseMgrFolderName(name){
+    const m = String(name).match(/^(\d{4}-\d{2}-\d{2})(?:_(.+))?$/);
+    if(m) return { date: m[1], label: m[2] || '' };
+    return { date: '', label: String(name) };
+  }
+  function escMgr(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
   async function renameFolder(path, oldName){
-    const input = prompt('Rename folder:', oldName);
-    if(input === null) return;
-    const clean = input.trim().replace(/[\/\\?%*:|"<>]/g,'-');
+    const fn = parseMgrFolderName(oldName);
+    let clean;
+    if(fn.date){
+      // Date folder: prompt for the TITLE only — the date stays as-is and
+      // keeps rendering on the line below. Stored as "<date>_<title>";
+      // empty title reverts to the plain date folder.
+      const input = prompt('Folder title (date stays below · empty = FOLDER):', fn.label);
+      if(input === null) return;
+      const label = input.trim().replace(/[\/\\?%*:|"<>]/g,'-');
+      clean = label ? `${fn.date}_${label}` : fn.date;
+    } else {
+      const input = prompt('Rename folder:', oldName);
+      if(input === null) return;
+      clean = input.trim().replace(/[\/\\?%*:|"<>]/g,'-');
+    }
     if(!clean || clean === oldName) return;
     const parent = parentPath(path);
     const newPath = `${parent}/${clean}`.replace(/\/+/g,'/');
