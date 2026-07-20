@@ -149,9 +149,9 @@
   }
   
   #canvasCursor {
-    position: absolute; border: 1px solid #000; box-shadow: 0 0 0 1px rgba(255,255,255,0.8);
+    position: absolute; left: 0; top: 0; border: 1px solid #000; box-shadow: 0 0 0 1px rgba(255,255,255,0.8);
     pointer-events: none; display: none; transform: translate(-50%, -50%);
-    box-sizing: border-box; z-index: 10;
+    box-sizing: border-box; z-index: 10; will-change: transform;
   }
 
   .comp-frame { background: #f5f5f7; position: relative; border-color: var(--border); }
@@ -772,13 +772,13 @@
         <img id="traceImage" alt="trace layer">
         <div id="traceSelectBox"></div>
         <canvas id="drawCanvas" width="1080" height="1080"></canvas>
-        <div id="canvasCursor"></div>
         <canvas id="paperOverlay" width="540" height="540"
                 style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none;
                        mix-blend-mode:multiply; display:none;"></canvas>
         <canvas id="lassoOverlay" width="1080" height="1080"
                 style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none;"></canvas>
         </div>
+        <div id="canvasCursor"></div>
         <div id="traceControls">
           <div class="tc-title">REFERENCE — ADJUST</div>
           <div class="tc-row"><span>SCALE</span><input type="range" id="traceScale" min="20" max="600" value="100"><span class="tc-val" id="traceScaleVal">1.0x</span></div>
@@ -3665,17 +3665,22 @@ showLayerMenu(ev.clientX, ev.clientY, [
       drawCanvas.style.cursor = 'none';
       const cursorCircle = $('canvasCursor');
       cursorCircle.style.display = 'block';
-      // Local (untransformed) pixels: the view's CSS scale handles zoom visually.
+      // The cursor lives OUTSIDE the transformed #canvasView and is driven
+      // by RAW screen coordinates — no inverse→forward transform round-trip.
+      // Positioning it inside the scaled layer magnified every sub-pixel
+      // rasterization snap by the zoom factor (the zoomed-in jitter), and
+      // fattened the 1px ring. Out here it's pointer-locked at any zoom /
+      // rotation and the ring stays 1px crisp.
       const view = $('canvasView');
-      const W0 = ((view.parentElement || view).getBoundingClientRect().width) || 1;
-      const size = brushSize * (W0 / 1080);
+      const fr = (view.parentElement || view).getBoundingClientRect(); // .canvas-frame, untransformed
+      const W0 = fr.width || 1;
+      const size = brushSize * (W0 / 1080) * (viewZoom || 1); // on-screen brush footprint
       cursorCircle.style.width = size + 'px';
       cursorCircle.style.height = size + 'px';
       cursorCircle.style.borderRadius = '50%'; // Round cursor to match round AA brush
       if (e) {
-        const p = getPos(e);
-        cursorCircle.style.left = p._lx + 'px';
-        cursorCircle.style.top = p._ly + 'px';
+        cursorCircle.style.transform =
+          `translate(${e.clientX - fr.left}px, ${e.clientY - fr.top}px) translate(-50%, -50%)`;
       }
     } else {
       $('canvasCursor').style.display = 'none';
@@ -3714,6 +3719,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
     $('navInfo').textContent = `${Math.round(viewZoom*100)}% · ${deg}°`;
     $('zoomSlider').value = Math.max(20, Math.min(600, Math.round(viewZoom*100)));
     updateNavPreview();
+    if($('canvasCursor').style.display === 'block') updateCursorState(); // ring size tracks zoom
   }
   function setViewZoom(z){
     viewZoom = Math.max(0.2, Math.min(6, z));
@@ -4924,21 +4930,31 @@ showLayerMenu(ev.clientX, ev.clientY, [
       return;
     }
     if(!drawing || !currentAction) return;
-    const p = getPos(e);
-    lastRawPos = p;
+    // Coalesced events: the browser batches high-frequency pen/mouse input
+    // into one pointermove — reading the batch keeps every in-between sample
+    // instead of just the last one. At high zoom the dropped samples showed
+    // up as angular, imprecise lines; this restores 1:1 input fidelity.
+    const batch = (typeof e.getCoalescedEvents === 'function' && e.getCoalescedEvents().length)
+      ? e.getCoalescedEvents() : [e];
     const pts = currentAction.points;
-    const last = pts[pts.length-1];
-    const dx = p.x - last.x, dy = p.y - last.y;
-    const dist = Math.hypot(dx, dy);
     // The stabilizer slack is meant to feel constant ON SCREEN. Its value is
     // stored in canvas px, so divide by the view zoom — otherwise zooming in
     // multiplied the dead-zone (e.g. 4× zoom → 4× bigger slack) and the
     // brush felt detached from the pointer.
     const slack = lazyRadius / (viewZoom || 1);
-    if(dist <= slack) return; // string is slack → brush stays put
-    const t = (dist - slack) / dist;
-    pts.push({ x: last.x + dx * t, y: last.y + dy * t });
-    repaintLiveStroke();
+    let moved = false;
+    for(const ev of batch){
+      const p = getPos(ev);
+      lastRawPos = p;
+      const last = pts[pts.length-1];
+      const dx = p.x - last.x, dy = p.y - last.y;
+      const dist = Math.hypot(dx, dy);
+      if(dist <= slack) continue; // string is slack → brush stays put
+      const t = (dist - slack) / dist;
+      pts.push({ x: last.x + dx * t, y: last.y + dy * t });
+      moved = true;
+    }
+    if(moved) repaintLiveStroke();
   });
 
   drawCanvas.addEventListener('pointerenter', e => updateCursorState(e));
