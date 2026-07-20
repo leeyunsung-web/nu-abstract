@@ -295,7 +295,13 @@
   function withArchiveVer(url){
     const v = archiveVer();
     if(!v || !url) return url;
-    return url + (url.includes('?') ? '&' : '?') + 'v=' + v;
+    let out = url + (url.includes('?') ? '&' : '?') + 'v=' + v;
+    // Propagation guard (see studio): within 20s of a bump, add a
+    // per-request buster so a not-yet-propagated stale response can never
+    // be cached under the stable key.
+    const age = Date.now() - (parseInt(v, 10) || 0);
+    if(age >= 0 && age < 20000) out += '&r=' + Date.now();
+    return out;
   }       
   const ARCHIVE_STORAGE_KEY = 'objet_studio_archive_cfg'; 
   const BG_STORAGE_KEY = 'objet_studio_archive_bg';       
@@ -821,11 +827,20 @@
   window.addEventListener('storage', ev=>{ if(ev.key === PAPER_KEY) applyPaperArchive(); });
   // The studio bumped the archive version (SAVE overwrite / delete) →
   // reload every collage image in place, keeping the current layout.
-  window.addEventListener('storage', ev=>{
-    if(ev.key !== ARCHIVE_VER_KEY) return;
+  // Staggered attempts: raw content can take a few seconds to propagate
+  // after the commit, so refresh at 1.5s / 6s / 16s. The early attempts
+  // carry a per-request buster (see withArchiveVer); the final one lands
+  // past the propagation window and settles on the stable cache key.
+  let archRefreshTimers = [];
+  function refreshCollageImages(){
     for(const o of itemsData){
       if(o.imEl && o.url) o.imEl.src = withArchiveVer(o.url);
     }
+  }
+  window.addEventListener('storage', ev=>{
+    if(ev.key !== ARCHIVE_VER_KEY) return;
+    archRefreshTimers.forEach(clearTimeout);
+    archRefreshTimers = [1500, 6000, 16000].map(ms => setTimeout(refreshCollageImages, ms));
   });
   applyPaperArchive();
 

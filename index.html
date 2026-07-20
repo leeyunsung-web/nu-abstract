@@ -2784,7 +2784,15 @@ showLayerMenu(ev.clientX, ev.clientY, [
   function withArchiveVer(url){
     const v = archiveVer();
     if(!v || !url) return url;
-    return url + (url.includes('?') ? '&' : '?') + 'v=' + v;
+    let out = url + (url.includes('?') ? '&' : '?') + 'v=' + v;
+    // Propagation guard: raw.githubusercontent can serve the PREVIOUS file
+    // for a few seconds after a commit. If a stale response were fetched
+    // right after the bump, it would be cached under the new stable key
+    // forever ("synced once, then stuck"). Within 20s of the bump, add a
+    // per-request buster so nothing stale can poison the stable key.
+    const age = Date.now() - (parseInt(v, 10) || 0);
+    if(age >= 0 && age < 20000) out += '&r=' + Date.now();
+    return out;
   }
 
   function saveBlobViaDownload(blob, filename){
@@ -2935,16 +2943,31 @@ showLayerMenu(ev.clientX, ev.clientY, [
         if(j && j.sha){ body.sha = j.sha; body.message = `Update ${filename}`; }
       }
     } catch(e){ /* no sha → plain add */ }
-    const res = await fetch(url, {
-      method: 'PUT',
-      headers: {
-        'Accept': 'application/vnd.github+json',
-        'Authorization': `Bearer ${token}`,
-        'X-GitHub-Api-Version': '2022-11-28',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(body)
-    });
+    const headers = {
+      'Accept': 'application/vnd.github+json',
+      'Authorization': `Bearer ${token}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+      'Content-Type': 'application/json'
+    };
+    const putOnce = () => fetch(url, { method:'PUT', headers, body: JSON.stringify(body) });
+    let res = await putOnce();
+    if(res.status === 409 || res.status === 422){
+      // sha conflict: consecutive saves can race the contents API, whose
+      // sha lookup may lag a few seconds behind the previous commit.
+      // Re-resolve the sha once after a short wait and retry.
+      await new Promise(r => setTimeout(r, 900));
+      try {
+        const head = await fetch(url + `?ref=${encodeURIComponent(branch || 'main')}&t=${Date.now()}`, {
+          headers: { 'Accept': 'application/vnd.github+json', 'Authorization': `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' },
+          cache: 'no-store'
+        });
+        if(head.ok){
+          const j = await head.json().catch(()=>null);
+          if(j && j.sha){ body.sha = j.sha; body.message = `Update ${filename}`; }
+        }
+      } catch(e){}
+      res = await putOnce();
+    }
     if(!res.ok){
       const err = await res.json().catch(()=>({}));
       throw new Error(`GitHub Commit Failed (${res.status}): ${err.message || res.statusText}`);
