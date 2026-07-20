@@ -1851,6 +1851,275 @@ showLayerMenu(ev.clientX, ev.clientY, [
   let lassoDrawing = null;   // points while dragging
   let lassoSelection = null; // committed closed polygon
 
+  // ==================== LASSO FREE TRANSFORM (Ctrl+T / T) ====================
+  // Photoshop-style transform of the strokes captured by the lasso on the
+  // ACTIVE layer: a frame with 8 handles — corners scale uniformly (hold
+  // Shift for free scaling), edges scale one axis, dragging inside moves.
+  // Enter / Ctrl+T / T applies, Esc cancels. Undo mirrors lassoDelete
+  // (prevOrder/nextOrder swap). NOTE: Chrome reserves Ctrl+T for "new tab"
+  // and pages cannot intercept it, so the bare T key is the reliable path.
+  let xform = null; // { items:[{orig, pts0, w0}], b0:{x,y,w,h}, b:{x,y,w,h}, drag:null }
+
+  function xformMapPoint(px, py){
+    const { b0, b } = xform;
+    return {
+      x: b.x + (px - b0.x) * (b.w / b0.w),
+      y: b.y + (py - b0.y) * (b.h / b0.h)
+    };
+  }
+  function xformScaleFactor(){
+    const { b0, b } = xform;
+    return (Math.abs(b.w / b0.w) + Math.abs(b.h / b0.h)) / 2;
+  }
+
+  function beginLassoTransform(){
+    if(xform){ applyLassoTransform(); return; } // toggle = apply
+    if(!lassoSelection || lassoSelection.length < 3){ toast('Make a lasso selection first (L).'); return; }
+    // A selected FOLDER widens the transform to every layer inside it —
+    // lasso with a folder active moves the whole folder's captured content.
+    const folderMode = activeFolderId != null && layers.some(l => l.folderId === activeFolderId);
+    const targetLayers = folderMode
+      ? layers.filter(l => l.folderId === activeFolderId)
+      : [activeLayer()];
+    const targetIds = new Set(targetLayers.map(l => l.id));
+    const items = [];
+    const imgItems = [];
+    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+    const grow = (x, y, pad)=>{
+      if(x - pad < minX) minX = x - pad;
+      if(y - pad < minY) minY = y - pad;
+      if(x + pad > maxX) maxX = x + pad;
+      if(y + pad > maxY) maxY = y + pad;
+    };
+    for(const a of actions){
+      if(!targetIds.has(a.layer)) continue;
+      if(a.type === 'stroke' && a.points && a.points.length){
+        // Split at the lasso boundary: ONLY the inside segments transform;
+        // the outside segments stay exactly where they are.
+        const split = splitStrokeByPolygonBoth(a, lassoSelection);
+        if(!split || !split.inside.length) continue;
+        const pad = (a.width || 1) / 2;
+        for(const seg of split.inside) for(const p of seg) grow(p.x, p.y, pad);
+        items.push({
+          orig: a,
+          inside: split.inside.map(seg => seg.map(p => ({x:p.x, y:p.y}))),
+          outside: split.outside.map(seg => seg.map(p => ({x:p.x, y:p.y}))),
+          w0: a.width || 1
+        });
+      } else if(a.type === 'image' && a.img && a.w > 0 && a.h > 0){
+        // Images move WHOLE when the selection touches them (corner/center
+        // inside the lasso, or a lasso vertex inside the image rect).
+        const corners = [[a.x,a.y],[a.x+a.w,a.y],[a.x,a.y+a.h],[a.x+a.w,a.y+a.h],[a.x+a.w/2,a.y+a.h/2]];
+        const touch = corners.some(([cx,cy]) => pointInPolygon(cx, cy, lassoSelection)) ||
+                      lassoSelection.some(v => v.x >= a.x && v.x <= a.x + a.w && v.y >= a.y && v.y <= a.y + a.h);
+        if(!touch) continue;
+        grow(a.x, a.y, 0); grow(a.x + a.w, a.y + a.h, 0);
+        imgItems.push({ orig: a, x0: a.x, y0: a.y, w0: a.w, h0: a.h });
+      }
+    }
+    if(!items.length && !imgItems.length){
+      toast(folderMode ? 'Nothing inside the selection in this folder.' : 'Nothing inside the selection on this layer.');
+      return;
+    }
+    const b0 = { x:minX, y:minY, w:Math.max(2, maxX-minX), h:Math.max(2, maxY-minY) };
+    const fName = folderMode ? (folders.find(f=>f.id===activeFolderId) || {}).name : null;
+    xform = { items, imgItems, b0, b: { ...b0 }, drag: null,
+              layerIds: [...targetIds], scopeName: fName || targetLayers[0].name };
+    drawXformFrame();
+    toast('TRANSFORM · drag corners/edges to scale, inside to move · Enter apply · Esc cancel');
+  }
+
+  function drawXformFrame(){
+    const oc = $('lassoOverlay');
+    if(!oc || !xform) return;
+    const c = oc.getContext('2d');
+    c.clearRect(0, 0, oc.width, oc.height);
+    const { b } = xform;
+    const hs = 8 / (viewZoom || 1); // constant on-screen handle size
+    c.save();
+    c.lineWidth = 1.5 / (viewZoom || 1);
+    c.setLineDash([6/(viewZoom||1), 4/(viewZoom||1)]);
+    c.strokeStyle = '#1d1d1f';
+    c.strokeRect(b.x, b.y, b.w, b.h);
+    c.setLineDash([]);
+    c.fillStyle = '#ffffff';
+    for(const [hx, hy] of xformHandlePositions()){
+      c.fillRect(hx - hs/2, hy - hs/2, hs, hs);
+      c.strokeRect(hx - hs/2, hy - hs/2, hs, hs);
+    }
+    c.restore();
+  }
+  function xformHandlePositions(){
+    const { b } = xform;
+    const cx = b.x + b.w/2, cy = b.y + b.h/2;
+    return [
+      [b.x, b.y], [cx, b.y], [b.x + b.w, b.y],
+      [b.x, cy],             [b.x + b.w, cy],
+      [b.x, b.y + b.h], [cx, b.y + b.h], [b.x + b.w, b.y + b.h]
+    ];
+  }
+  // Handle ids: 0 tl,1 tm,2 tr,3 ml,4 mr,5 bl,6 bm,7 br; 'move' inside; null outside
+  function xformHitTest(px, py){
+    const tol = 12 / (viewZoom || 1);
+    const hp = xformHandlePositions();
+    for(let i=0; i<hp.length; i++){
+      if(Math.abs(px - hp[i][0]) <= tol && Math.abs(py - hp[i][1]) <= tol) return i;
+    }
+    const { b } = xform;
+    if(px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h) return 'move';
+    return null;
+  }
+
+  let _xformRaf = false;
+  function xformPreview(){
+    if(_xformRaf) return;
+    _xformRaf = true;
+    requestAnimationFrame(()=>{
+      _xformRaf = false;
+      if(!xform) return;
+      const s = xformScaleFactor();
+      const itemByOrig = new Map(xform.items.map(it => [it.orig, it]));
+      const imgByOrig  = new Map(xform.imgItems.map(it => [it.orig, it]));
+      const kx = xform.b.w / xform.b0.w, ky = xform.b.h / xform.b0.h;
+      for(const lid of xform.layerIds){
+        const l = layerById(lid);
+        if(!l) continue;
+        l.ctx.clearRect(0, 0, l.canvas.width, l.canvas.height);
+        for(const a of actions){
+          if(a.layer !== lid) continue;
+          try {
+            const it = (a.type === 'stroke') ? itemByOrig.get(a) : null;
+            if(it){
+              for(const seg of it.outside){
+                renderStrokeFull(l.ctx, { ...a, points: seg });
+              }
+              for(const seg of it.inside){
+                const pts = seg.map(p => xformMapPoint(p.x, p.y));
+                renderStrokeFull(l.ctx, { ...a, points: pts, width: Math.max(0.5, it.w0 * s) });
+              }
+            } else if(a.type === 'stroke') renderStrokeFull(l.ctx, a);
+            else if(a.type === 'fill'){
+              if(a.m || a.src) replaySplitFill(a);
+              else floodFillApply(l.ctx, a.x, a.y, a.color, a.tolerance);
+            }
+            else if(a.type === 'layerRecolor') applyLayerRecolor(l.ctx, a.color);
+            else if(a.type === 'image' && a.img && a.w > 0 && a.h > 0){
+              const im = imgByOrig.get(a);
+              if(im){
+                const m = xformMapPoint(im.x0, im.y0);
+                l.ctx.drawImage(a.img, m.x, m.y, Math.max(1, im.w0 * kx), Math.max(1, im.h0 * ky));
+              } else {
+                l.ctx.drawImage(a.img, a.x, a.y, a.w, a.h);
+              }
+            }
+          } catch(err){ console.error('xform preview: skipped an action', err, a); }
+        }
+      }
+      compositeLayers();
+      drawXformFrame();
+    });
+  }
+
+  function xformPointerDown(p){
+    const hit = xformHitTest(p.x, p.y);
+    if(hit === null) return false; // outside → caller may apply
+    xform.drag = { hit, start: p, b: { ...xform.b } };
+    return true;
+  }
+  function xformPointerMove(p, shiftKey){
+    const d = xform.drag;
+    if(!d) return;
+    const dx = p.x - d.start.x, dy = p.y - d.start.y;
+    const s0 = d.b;
+    let b = { ...s0 };
+    const MIN = 4;
+    if(d.hit === 'move'){
+      b.x = s0.x + dx; b.y = s0.y + dy;
+    } else {
+      // Anchored edges: which sides this handle drags
+      const left  = (d.hit === 0 || d.hit === 3 || d.hit === 5);
+      const right = (d.hit === 2 || d.hit === 4 || d.hit === 7);
+      const top   = (d.hit === 0 || d.hit === 1 || d.hit === 2);
+      const bot   = (d.hit === 5 || d.hit === 6 || d.hit === 7);
+      let x0 = s0.x, x1 = s0.x + s0.w, y0 = s0.y, y1 = s0.y + s0.h;
+      if(left)  x0 = Math.min(x1 - MIN, x0 + dx);
+      if(right) x1 = Math.max(x0 + MIN, x1 + dx);
+      if(top)   y0 = Math.min(y1 - MIN, y0 + dy);
+      if(bot)   y1 = Math.max(y0 + MIN, y1 + dy);
+      b = { x:x0, y:y0, w:x1-x0, h:y1-y0 };
+      // Corner handles scale UNIFORMLY by default (Photoshop); Shift = free.
+      const isCorner = [0,2,5,7].includes(d.hit);
+      if(isCorner && !shiftKey){
+        const k = Math.max(b.w / s0.w, b.h / s0.h);
+        const nw = Math.max(MIN, s0.w * k), nh = Math.max(MIN, s0.h * k);
+        // Keep the anchored corner fixed
+        b.x = left ? (s0.x + s0.w - nw) : s0.x;
+        b.y = top  ? (s0.y + s0.h - nh) : s0.y;
+        b.w = nw; b.h = nh;
+      }
+    }
+    xform.b = b;
+    xformPreview();
+  }
+  function xformPointerUp(){
+    if(xform) xform.drag = null;
+  }
+
+  function applyLassoTransform(){
+    if(!xform) return;
+    const { b0, b } = xform;
+    const unchanged = Math.abs(b.x-b0.x) < 0.01 && Math.abs(b.y-b0.y) < 0.01 &&
+                      Math.abs(b.w-b0.w) < 0.01 && Math.abs(b.h-b0.h) < 0.01;
+    if(unchanged){ cancelLassoTransform(); return; }
+    const s = xformScaleFactor();
+    const prevOrder = actions.slice();
+    const itemByOrig = new Map(xform.items.map(it => [it.orig, it]));
+    const imgByOrig  = new Map(xform.imgItems.map(it => [it.orig, it]));
+    const kx = xform.b.w / xform.b0.w, ky = xform.b.h / xform.b0.h;
+    const next = [];
+    for(const a of actions){
+      const it = itemByOrig.get(a);
+      if(it){
+        for(const seg of it.outside){
+          next.push({ ...it.orig, id: ++actionCounter, points: seg });
+        }
+        for(const seg of it.inside){
+          next.push({ ...it.orig, id: ++actionCounter,
+                      points: seg.map(p => xformMapPoint(p.x, p.y)),
+                      width: Math.max(0.5, it.w0 * s) });
+        }
+        continue;
+      }
+      const im = imgByOrig.get(a);
+      if(im){
+        const m = xformMapPoint(im.x0, im.y0);
+        next.push({ ...im.orig, id: ++actionCounter,
+                    x: m.x, y: m.y,
+                    w: Math.max(1, im.w0 * kx), h: Math.max(1, im.h0 * ky) });
+        continue;
+      }
+      next.push(a);
+    }
+    actions.length = 0;
+    actions.push(...next);
+    const nextOrder = actions.slice();
+    const layerName = xform.scopeName || '';
+    actions.push({ type:'lassoTransform', id: ++actionCounter, prevOrder, nextOrder, layerName });
+    redoStack.length = 0;
+    xform = null;
+    clearLasso();
+    clearStrokeSelection();
+    renderAll();
+    toast(`Transform applied to ${layerName} (Ctrl+Z to undo).`);
+  }
+  function cancelLassoTransform(){
+    if(!xform) return;
+    xform = null;
+    renderAll();
+    if(lassoSelection) drawLassoOverlay(lassoSelection, true);
+    toast('Transform cancelled.');
+  }
+
   function clearLasso(){
     lassoDrawing = null;
     lassoSelection = null;
@@ -1890,6 +2159,44 @@ showLayerMenu(ev.clientX, ev.clientY, [
 
   // Split a stroke into the segments OUTSIDE the polygon (densified so the
   // cut lands between recorded points too). Returns null when untouched.
+  // Like splitStrokeByPolygon, but returns BOTH sides:
+  //   { inside:[seg,…], outside:[seg,…] } — or null if the stroke doesn't
+  // touch the polygon. Used by the lasso FREE TRANSFORM so only the part
+  // INSIDE the selection moves; the rest stays put (Photoshop behaviour).
+  function splitStrokeByPolygonBoth(a, poly){
+    let pts = a.points;
+    if(pts.length > 1){
+      const dense = [pts[0]];
+      for(let i=1; i<pts.length; i++){
+        const p0 = pts[i-1], p1 = pts[i];
+        const n = Math.floor(Math.hypot(p1.x-p0.x, p1.y-p0.y) / 6);
+        for(let k=1; k<=n; k++) dense.push({ x:p0.x+(p1.x-p0.x)*k/(n+1), y:p0.y+(p1.y-p0.y)*k/(n+1) });
+        dense.push(p1);
+      }
+      pts = dense;
+    }
+    const inside = [], outside = [];
+    let seg = [], segIn = null;
+    const single = a.points.length === 1;
+    const flush = ()=>{
+      if(seg.length >= 2 || (seg.length === 1 && single)){
+        (segIn ? inside : outside).push(seg);
+      }
+      seg = [];
+    };
+    let touched = false;
+    for(const p of pts){
+      const isIn = pointInPolygon(p.x, p.y, poly);
+      if(isIn) touched = true;
+      if(segIn === null) segIn = isIn;
+      if(isIn !== segIn){ flush(); segIn = isIn; }
+      seg.push(p);
+    }
+    flush();
+    if(!touched) return null;
+    return { inside, outside };
+  }
+
   function splitStrokeByPolygon(a, poly){
     let pts = a.points;
     if(pts.length > 1){
@@ -2387,6 +2694,16 @@ showLayerMenu(ev.clientX, ev.clientY, [
         e.preventDefault(); // never the browser's save-page dialog
         $('saveObjBtn').click();
       }
+      // Ctrl+T while the pointer is over the drawing board → free transform.
+      // Best effort: Chrome reserves Ctrl+T for "new tab" and never delivers
+      // the event to pages, so there it will still open a tab — bare T
+      // (below) is the dependable trigger. Environments that do deliver it
+      // (app windows, Electron, fullscreen keyboard lock) work as intended.
+      if(e.key.toLowerCase() === 't' && pointerOverCanvas) {
+        e.preventDefault();
+        e.stopPropagation();
+        beginLassoTransform();
+      }
     } else {
       const k = e.key.toLowerCase();
       if(k === 'b') { document.querySelector('[data-tool="brush"]').click(); }
@@ -2398,6 +2715,9 @@ showLayerMenu(ev.clientX, ev.clientY, [
         e.preventDefault();
         lassoDeleteOnActiveLayer();
       }
+      if(k === 't'){ e.preventDefault(); beginLassoTransform(); }
+      if(e.key === 'Enter' && xform){ e.preventDefault(); applyLassoTransform(); }
+      if(e.key === 'Escape' && xform){ cancelLassoTransform(); return; }
       if(e.key === 'Escape' && (lassoSelection || lassoDrawing)){ clearLasso(); }
       if(k === 'r' && !e.repeat){ rotateKeyHeld = true; updateCursorState(); }
       if(e.key === ' '){ if(!e.repeat){ spaceKeyHeld = true; updateCursorState(); } e.preventDefault(); }
@@ -3722,9 +4042,21 @@ showLayerMenu(ev.clientX, ev.clientY, [
     try {
       await copyFolderRecursive(path, newPath);
       await deleteFolderRecursive(path);
-      toast('Folder renamed.');
-      await new Promise(r=>setTimeout(r, 600));
+      // GitHub's listing lags several seconds behind a copy+delete burst —
+      // a single early refresh showed the OLD structure ("rename didn't
+      // apply"). Poll until the listing actually reflects the rename.
+      const parentDir = parent || mgrRootPath;
+      let confirmed = false;
+      for(let attempt = 0; attempt < 7; attempt++){
+        await new Promise(r=>setTimeout(r, attempt === 0 ? 700 : 1300));
+        try {
+          const items = await mgrList(parentDir);
+          const names = items.filter(i=>i.type==='dir').map(i=>i.name);
+          if(names.includes(clean) && !names.includes(oldName)){ confirmed = true; break; }
+        } catch(e){ /* transient — keep polling */ }
+      }
       await refreshMgr();
+      toast(confirmed ? 'Folder renamed.' : 'Folder renamed — listing may take a few more seconds.');
     } catch(e){ console.error(e); toast('Rename failed: ' + e.message); }
   }
 
@@ -4871,6 +5203,15 @@ showLayerMenu(ev.clientX, ev.clientY, [
   }
 
   // Prevent right-click context menu and tablet barrel-button (secondary) drawing on the canvas
+  // Hover tracking for the canvas area — gates the Ctrl+T free-transform
+  // shortcut so it only fires while the pointer is over the drawing board.
+  let pointerOverCanvas = false;
+  {
+    const frameEl = document.querySelector('.canvas-frame') || drawCanvas;
+    frameEl.addEventListener('pointerenter', ()=>{ pointerOverCanvas = true; });
+    frameEl.addEventListener('pointerleave', ()=>{ pointerOverCanvas = false; });
+  }
+
   drawCanvas.addEventListener('contextmenu', e => e.preventDefault());
   traceImg.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -4886,6 +5227,13 @@ showLayerMenu(ev.clientX, ev.clientY, [
     if(replaying){ toast('Replaying — please wait.'); return; }
 
     const p = getPos(e);
+    // FREE TRANSFORM intercepts the canvas: handles/inside drag, outside = apply.
+    if(xform){
+      e.preventDefault();
+      drawCanvas.setPointerCapture && drawCanvas.setPointerCapture(e.pointerId);
+      if(!xformPointerDown(p)) applyLassoTransform();
+      return;
+    }
 
     if(rotateKeyHeld || spaceKeyHeld){
       const view = $('canvasView');
@@ -5400,6 +5748,10 @@ showLayerMenu(ev.clientX, ev.clientY, [
       applyViewTransform();
       return;
     }
+    if(xform){
+      if(xform.drag){ xformPointerMove(getPos(e), e.shiftKey); }
+      return;
+    }
     if(lassoDrawing){
       const p = getPos(e);
       const last = lassoDrawing[lassoDrawing.length-1];
@@ -5449,6 +5801,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
 
   function endStroke(){
     if(viewDrag){ viewDrag = null; updateCursorState(); return; }
+    if(xform){ xformPointerUp(); return; }
     if(lassoDrawing){
       if(lassoDrawing.length >= 3){
         lassoSelection = lassoDrawing;
@@ -5534,6 +5887,15 @@ showLayerMenu(ev.clientX, ev.clientY, [
       toast('Lasso delete undone.');
       return;
     }
+    // Lasso transform → restore the pre-transform action list.
+    if(undoneAction.type === 'lassoTransform'){
+      actions.length = 0;
+      actions.push(...undoneAction.prevOrder);
+      clearStrokeSelection();
+      renderAll();
+      toast('Transform undone.');
+      return;
+    }
     // Per-layer line width → restore original stroke widths.
     if(undoneAction.type === 'layerWidth'){
       undoneAction.items.forEach(it => { it.a.width = it.prev; });
@@ -5614,6 +5976,15 @@ showLayerMenu(ev.clientX, ev.clientY, [
       clearStrokeSelection();
       renderAll();
       toast('Lasso delete redone.');
+      return;
+    }
+    if(redoneAction.type === 'lassoTransform'){
+      actions.length = 0;
+      actions.push(...redoneAction.nextOrder);
+      actions.push(redoneAction);
+      clearStrokeSelection();
+      renderAll();
+      toast('Transform redone.');
       return;
     }
     if(redoneAction.type === 'layerWidth'){
@@ -6653,6 +7024,12 @@ showLayerMenu(ev.clientX, ev.clientY, [
       }
       // 2) Fold erasers into the stroke geometry.
       const bakedRecipe = bakeErasers(recolored, a => a.li || 0, { preserveTextured: true });
+      // Collects the variation's own recipe. MUST be declared before the
+      // META block below pushes into it — the previous ordering used it
+      // before its `const` (TDZ), so any recipe carrying a meta action
+      // threw "Cannot access 'redrawnActions' before initialization" and
+      // the whole variation silently failed.
+      const redrawnActions = [];
       // Carry the structural META through to the variation's recipe —
       // without it, saved variations collapsed into a single folder on load.
       const srcMeta = obj.recipe.find(a => a && a.type === 'meta');
@@ -6682,7 +7059,6 @@ showLayerMenu(ev.clientX, ev.clientY, [
         };
       }
 
-      const redrawnActions = [];
       const colorShift = randColorShift();
       bakedRecipe.forEach(a=>{
         if(a.type === 'stroke'){
