@@ -820,7 +820,7 @@
       <button class="btn btn-accent btn-full" id="registerBtn" style="margin-top:6px;">REGISTER OBJECT →</button>
       <div class="replay-row">
         <button class="btn" id="replayBtn" style="flex:1;" title="Replay the drawing process (trace layer hidden)">▶ REPLAY</button>
-        <button class="btn" id="replaySaveBtn" style="flex:1;" title="Replay and save as a .webm video">⏺ SAVE REPLAY</button>
+        <button class="btn" id="replaySaveBtn" style="flex:1;" title="Replay and save as a video — MP4 (H.264) when the browser supports it, WebM otherwise">⏺ SAVE REPLAY</button>
         <button class="btn" id="exportSvgBtn" style="flex:1;" title="Export the visible drawing as a vector SVG (final lines only — erasers baked in)">⬡ EXPORT SVG</button>
         <select id="replaySpeed" title="Replay speed" style="font-family:var(--font-mono); font-size:12px; padding:0 8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--ink); cursor:pointer;">
           <option value="0.25">0.25x</option>
@@ -1005,6 +1005,8 @@
       <button class="btn btn-sm btn-ghost" id="mgrSelectAll">SELECT ALL</button>
       <button class="btn btn-sm btn-danger" id="mgrDeleteSelected" style="display:none;">DELETE SELECTED</button>
       <button class="btn btn-sm" id="mgrNewFolder">+ NEW FOLDER</button>
+      <button class="btn btn-sm" id="mgrReplayAll" title="Replay the drawing process of every archived piece, in order">▶ REPLAY ALL</button>
+      <button class="btn btn-sm" id="mgrReplaySave" title="Replay the entire archive and save it as one video (MP4 when supported)">⏺ SAVE REPLAY</button>
       <button class="btn btn-sm btn-ghost" id="mgrRefresh">↻ REFRESH</button>
     </div>
     <div class="mgr-grid" id="mgrGrid">
@@ -1012,6 +1014,18 @@
     </div>
     <div class="modal-btns">
       <button class="btn btn-ghost" id="mgrClose">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="archReplayModal">
+  <div class="modal" style="max-width:640px;">
+    <h2>ARCHIVE REPLAY</h2>
+    <p class="hint" id="archReplayInfo">Collecting archive…</p>
+    <canvas id="archReplayCanvas" width="1080" height="1080"
+            style="width:100%; aspect-ratio:1/1; display:block; border:1px solid var(--border-soft); border-radius:8px; background:#fff;"></canvas>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" id="archReplayStop">STOP</button>
     </div>
   </div>
 </div>
@@ -2151,6 +2165,28 @@ showLayerMenu(ev.clientX, ev.clientY, [
     }
   }
 
+  // Pick the most universally playable recording format the browser can
+  // encode. MP4/H.264 plays everywhere (Windows/macOS/iOS/Android/messengers)
+  // — Chrome 126+ and Safari support it in MediaRecorder. WebM is the
+  // fallback (VP9 needs codec support on the player side, which is what
+  // made saved replays error out in common players).
+  function pickRecordingMime(){
+    const candidates = [
+      'video/mp4;codecs=avc1.640028',
+      'video/mp4;codecs=avc1.42E01E',
+      'video/mp4;codecs=avc1',
+      'video/mp4',
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm'
+    ];
+    for(const m of candidates){
+      try { if(MediaRecorder.isTypeSupported(m)) return m; } catch(e){}
+    }
+    return '';
+  }
+  function recordingExt(mime){ return (mime || '').includes('mp4') ? 'mp4' : 'webm'; }
+
   async function playReplay(opts){
     const record = !!(opts && opts.record);
     if(replaying) { toast('Replay already running.'); return; }
@@ -2170,22 +2206,39 @@ showLayerMenu(ev.clientX, ev.clientY, [
     const doneCtx = id => (doneL.get(id) || doneL.get(layers[0].id)).getContext('2d', { willReadFrequently: true });
     const rTemp = mkc();
 
-    let recorder = null;
+    let recorder = null, recMime = '', recCanvas = null, recCtx = null, recErr = null;
     const chunks = [];
     if(record){
       if(typeof MediaRecorder === 'undefined'){
         toast('This browser does not support video recording.');
       } else {
-        const stream = drawCanvas.captureStream(60);
-        const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9'
-                   : (MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '');
+        // Record a MIRROR canvas with a solid white background — recording
+        // the transparent drawing canvas directly turned unpainted areas
+        // BLACK in the encoded video (players composite alpha onto black),
+        // which read as a broken file.
+        recCanvas = mkc();
+        recCtx = recCanvas.getContext('2d');
+        recCtx.fillStyle = '#ffffff';
+        recCtx.fillRect(0, 0, recCanvas.width, recCanvas.height);
+        const stream = recCanvas.captureStream(60);
+        recMime = pickRecordingMime();
         try {
-          recorder = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 8000000 } : undefined);
+          recorder = new MediaRecorder(stream, recMime ? { mimeType: recMime, videoBitsPerSecond: 8000000 } : undefined);
           recorder.ondataavailable = ev => { if(ev.data && ev.data.size) chunks.push(ev.data); };
-          recorder.start();
+          recorder.onerror = ev => { recErr = (ev && ev.error) || new Error('recorder error'); };
+          // Timeslice: flush a chunk every second — a single giant end-of-
+          // recording buffer was fragile (long replays could stop with an
+          // empty/truncated blob → unplayable file).
+          recorder.start(1000);
         } catch(e){ console.error(e); recorder = null; toast('Recording failed to start.'); }
       }
     }
+    const mirrorToRec = ()=>{
+      if(!recCtx) return;
+      recCtx.fillStyle = '#ffffff';
+      recCtx.fillRect(0, 0, recCanvas.width, recCanvas.height);
+      recCtx.drawImage(drawCanvas, 0, 0);
+    };
 
     const raf = () => new Promise(r => requestAnimationFrame(r));
     const totalPts = actions.reduce((sum,a)=> sum + (a.type==='stroke' ? a.points.length : 14), 0);
@@ -2215,6 +2268,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
       }
       dctx.restore();
       updateNavPreview();
+      mirrorToRec();
     };
 
     toast(record ? 'Replaying & recording…' : 'Replaying…');
@@ -2277,10 +2331,18 @@ showLayerMenu(ev.clientX, ev.clientY, [
     setTraceVisibleForReplay(true);
 
     if(recorder && recorder.state !== 'inactive'){
+      mirrorToRec(); // make sure the final frame is in the recording
       await new Promise(res => { recorder.onstop = res; recorder.stop(); });
-      const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
-      saveBlobViaDownload(blob, `replay_${todayFolderName()}_${timeStamp()}.webm`);
-      toast('Replay video saved (.webm)');
+      if(recErr || !chunks.length){
+        console.error('recording failed', recErr);
+        toast('Recording failed — no video data was produced.');
+      } else {
+        const type = recorder.mimeType || recMime || 'video/webm';
+        const blob = new Blob(chunks, { type });
+        const ext = recordingExt(type);
+        saveBlobViaDownload(blob, `replay_${todayFolderName()}_${timeStamp()}.${ext}`);
+        toast(`Replay video saved (.${ext}${ext === 'mp4' ? ' · H.264' : ''})`);
+      }
     }
     if(replayBtnEl) replayBtnEl.disabled = false;
     if(replaySaveBtnEl) replaySaveBtnEl.disabled = false;
@@ -3558,6 +3620,216 @@ showLayerMenu(ev.clientX, ev.clientY, [
   $('mgrSelectAll').addEventListener('click', selectAllFiles);
   $('mgrModal').addEventListener('click', e=>{ if(e.target === $('mgrModal')) closeMgr(); });
 
+  // ==================== ARCHIVE REPLAY (master only) ====================
+  // Replays the embedded drawing recipe of EVERY archived PNG, in
+  // folder/name order, on a dedicated canvas — optionally recorded to one
+  // video. PNGs without a recipe are shown as a still for a beat, so the
+  // video covers the whole archive.
+  let archReplayRunning = false, archReplayAbort = false;
+
+  async function mgrCollectAllPngs(path){
+    const out = [];
+    let items = [];
+    try { items = await mgrList(path); } catch(e){ return out; }
+    const dirs  = items.filter(i=>i.type==='dir').sort((a,b)=>a.name.localeCompare(b.name));
+    const files = items.filter(i=>i.type==='file' && /\.png$/i.test(i.name)).sort((a,b)=>a.name.localeCompare(b.name));
+    out.push(...files);
+    for(const d of dirs) out.push(...await mgrCollectAllPngs(`${path}/${d.name}`));
+    return out;
+  }
+
+  // Progressive replay of one recipe (compact li/tx keys) onto displayCtx.
+  // W×H = the PNG's own pixel size (the recipe's coordinate space); the
+  // result is letterboxed into the display canvas.
+  async function archReplayRecipe(displayCtx, recipe, W, H, speed){
+    const raf = () => new Promise(r => requestAnimationFrame(r));
+    const mkc = (w,h)=>{ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; };
+    const doneL = new Map(); // li → canvas
+    const liOf = a => a.li || 0;
+    const ensure = li => {
+      if(!doneL.has(li)) doneL.set(li, mkc(W,H));
+      return doneL.get(li).getContext('2d', { willReadFrequently:true });
+    };
+    recipe.forEach(a => { if(a.type==='stroke'||a.type==='fill'||a.type==='layerRecolor') ensure(liOf(a)); });
+    const lis = [...doneL.keys()].sort((a,b)=>a-b);
+    const temp = mkc(W,H);
+    const blit = (partialLi, drawPartial)=>{
+      const D = displayCtx.canvas;
+      displayCtx.fillStyle = '#ffffff';
+      displayCtx.fillRect(0,0,D.width,D.height);
+      const s = Math.min(D.width/W, D.height/H);
+      const ox = (D.width - W*s)/2, oy = (D.height - H*s)/2;
+      displayCtx.save();
+      displayCtx.translate(ox, oy); displayCtx.scale(s, s);
+      for(const li of lis){
+        const dc = doneL.get(li);
+        if(drawPartial && li === partialLi){
+          const t = temp.getContext('2d');
+          t.clearRect(0,0,W,H); t.drawImage(dc,0,0); drawPartial(t);
+          displayCtx.drawImage(temp,0,0);
+        } else {
+          displayCtx.drawImage(dc,0,0);
+        }
+      }
+      displayCtx.restore();
+    };
+    const totalPts = recipe.reduce((s,a)=> s + (a.type==='stroke' ? a.points.length : 14), 0);
+    const ptsPerFrame = Math.max(0.2, (totalPts / 240) * speed); // ≈4s per piece @60fps, 1x
+    const beat = n => Math.max(1, Math.round(n / speed));
+    for(const a of recipe){
+      if(archReplayAbort) return;
+      const li = liOf(a);
+      if(a.type === 'stroke'){
+        const pts = a.points;
+        const isEraser = a.tool === 'eraser';
+        const tex = a.texture || a.tx;
+        const grn = (a.grain != null ? a.grain : a.g);
+        const sd  = (a.seed  != null ? a.seed  : a.sd);
+        let prog = 1;
+        while(prog < pts.length){
+          if(archReplayAbort) return;
+          const n = Math.max(1, Math.ceil(prog));
+          blit(li, t => strokeSmoothPath(t, pts.slice(0, n), a.width, a.color, isEraser, tex, grn, sd));
+          await raf();
+          prog += ptsPerFrame;
+        }
+        strokeSmoothPath(ensure(li), pts, a.width, a.color, isEraser, tex, grn, sd);
+        blit(); await raf();
+      } else if(a.type === 'fill'){
+        const dc = ensure(li);
+        if(a.m){
+          const mw = a.mw || W, mh = a.mh || H;
+          paintSplitFill(dc, decodeMask(a.m, mw*mh), a.color, a.ox, a.oy, mw, mh);
+        } else if(a.sli && a.sli.length){
+          const sc = mkc(W,H), scx = sc.getContext('2d', { willReadFrequently:true });
+          for(const s2 of a.sli){ if(doneL.has(s2)) scx.drawImage(doneL.get(s2),0,0); }
+          splitFillApply(dc, scx, a.x, a.y, a.color, a.tolerance||0);
+        } else {
+          floodFillApply(dc, a.x, a.y, a.color, a.tolerance||0);
+        }
+        blit();
+        for(let f=0, m=beat(12); f<m; f++){ if(archReplayAbort) return; await raf(); }
+      } else if(a.type === 'layerRecolor'){
+        applyLayerRecolor(ensure(li), a.color);
+        blit();
+        for(let f=0, m=beat(10); f<m; f++){ if(archReplayAbort) return; await raf(); }
+      }
+      // 'meta' actions carry structure only — nothing to draw
+    }
+    blit();
+  }
+
+  async function playArchiveReplay(record){
+    if(userRole !== 'master'){ toast('Master access required.'); return; }
+    if(!ghConfig || !ghConfig.token){ toast('Configure GitHub first (CONFIG at top).'); return; }
+    if(archReplayRunning){ toast('Archive replay already running.'); return; }
+    archReplayRunning = true; archReplayAbort = false;
+    const btnA = $('mgrReplayAll'), btnB = $('mgrReplaySave');
+    if(btnA) btnA.disabled = true;
+    if(btnB) btnB.disabled = true;
+    const modal = $('archReplayModal');
+    modal.classList.add('show');
+    const info = $('archReplayInfo');
+    const cv = $('archReplayCanvas');
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,cv.width,cv.height);
+    info.textContent = 'Collecting archive…';
+
+    let recorder = null, recMime = '', recErr = null;
+    const chunks = [];
+    if(record){
+      if(typeof MediaRecorder === 'undefined'){
+        toast('This browser does not support video recording.');
+      } else {
+        const stream = cv.captureStream(60);
+        recMime = pickRecordingMime();
+        try {
+          recorder = new MediaRecorder(stream, recMime ? { mimeType: recMime, videoBitsPerSecond: 8000000 } : undefined);
+          recorder.ondataavailable = ev => { if(ev.data && ev.data.size) chunks.push(ev.data); };
+          recorder.onerror = ev => { recErr = (ev && ev.error) || new Error('recorder error'); };
+          recorder.start(1000);
+        } catch(e){ console.error(e); recorder = null; toast('Recording failed to start.'); }
+      }
+    }
+
+    const raf = () => new Promise(r => requestAnimationFrame(r));
+    const speed = parseFloat(($('replaySpeed') && $('replaySpeed').value) || '1') || 1;
+    let played = 0, skipped = 0;
+    try {
+      const root = mgrRootPath || (ghConfig.path || 'gallery').replace(/^\/+|\/+$/g,'');
+      const files = await mgrCollectAllPngs(root);
+      if(!files.length) info.textContent = 'Archive is empty.';
+      for(let i=0; i<files.length; i++){
+        if(archReplayAbort) break;
+        const f = files[i];
+        info.textContent = `${i+1} / ${files.length} — ${f.path || f.name}`;
+        let buf = null;
+        try {
+          const res = await fetch(f.download_url, { cache:'no-store' });
+          if(!res.ok) throw new Error('HTTP ' + res.status);
+          buf = await res.arrayBuffer();
+        } catch(e){ skipped++; continue; }
+        const recipe = extractRecipeFromPng(buf);
+        let img = null;
+        try { img = await createImageBitmap(new Blob([buf], { type:'image/png' })); } catch(e){}
+        if(recipe && recipe.length){
+          const W = (img && img.width) || 1080, H = (img && img.height) || 1080;
+          await archReplayRecipe(ctx, recipe, W, H, speed);
+          played++;
+        } else if(img){
+          // No recipe embedded → show the finished piece as a still beat.
+          ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,cv.width,cv.height);
+          const s = Math.min(cv.width/img.width, cv.height/img.height);
+          ctx.drawImage(img, (cv.width-img.width*s)/2, (cv.height-img.height*s)/2, img.width*s, img.height*s);
+          for(let fr=0, m=Math.max(1, Math.round(90/speed)); fr<m; fr++){ if(archReplayAbort) break; await raf(); }
+          played++;
+        } else {
+          skipped++;
+        }
+        if(img && img.close) img.close();
+        for(let fr=0, m=Math.max(1, Math.round(30/speed)); fr<m; fr++){ if(archReplayAbort) break; await raf(); } // hold between pieces
+      }
+    } catch(e){
+      console.error(e);
+      toast('Archive replay error: ' + e.message);
+    }
+
+    if(recorder && recorder.state !== 'inactive'){
+      await new Promise(res => { recorder.onstop = res; recorder.stop(); });
+      if(recErr || !chunks.length){
+        console.error('recording failed', recErr);
+        toast('Recording failed — no video data was produced.');
+      } else {
+        const type = recorder.mimeType || recMime || 'video/webm';
+        const blob = new Blob(chunks, { type });
+        const ext = recordingExt(type);
+        saveBlobViaDownload(blob, `archive_replay_${todayFolderName()}_${timeStamp()}.${ext}`);
+        toast(`Archive replay video saved (.${ext}${ext === 'mp4' ? ' · H.264' : ''})`);
+      }
+    }
+    info.textContent = archReplayAbort
+      ? `Stopped — ${played} piece(s) played`
+      : `Done — ${played} piece(s) played${skipped ? `, ${skipped} skipped` : ''}`;
+    archReplayRunning = false;
+    if(btnA) btnA.disabled = false;
+    if(btnB) btnB.disabled = false;
+  }
+
+  $('mgrReplayAll').addEventListener('click', ()=> playArchiveReplay(false));
+  $('mgrReplaySave').addEventListener('click', ()=> playArchiveReplay(true));
+  // STOP while running aborts (result stays visible); when idle it closes.
+  $('archReplayStop').addEventListener('click', ()=>{
+    if(archReplayRunning) archReplayAbort = true;
+    else $('archReplayModal').classList.remove('show');
+  });
+  $('archReplayModal').addEventListener('click', e=>{
+    if(e.target === $('archReplayModal')){
+      archReplayAbort = true;
+      if(!archReplayRunning) $('archReplayModal').classList.remove('show');
+    }
+  });
+
+
   function updateStat(){
     $('statReadout').textContent = `OBJ ${String(objects.length).padStart(4,'0')} · READY`;
   }
@@ -4818,8 +5090,20 @@ showLayerMenu(ev.clientX, ev.clientY, [
   // contain only the FINAL visible lines — textures (pencil/spray) can never
   // resurrect erased marks, and the data is one step from clean SVG paths.
   // keyOf: returns the layer grouping key for an action (a.layer or a.li).
-  function bakeErasers(list, keyOf){
+  //
+  // opts.preserveTextured — geometric point-trimming is WRONG for textured
+  // strokes: erasing spray fringe dots never crosses the CENTER path (so
+  // nothing trims and the eraser was silently dropped — trims vanished on
+  // REGISTER → TO DRAWING), and trimming points shifts the spray's
+  // sequential RNG so the scatter regenerates differently anyway. In this
+  // mode textured strokes keep their full path, textured erasers never trim,
+  // and any eraser that touched a textured stroke (or is itself textured)
+  // is KEPT in the list so replay re-applies it via destination-out — the
+  // trimmed result reproduces exactly.
+  function bakeErasers(list, keyOf, opts){
+    const preserveTextured = !!(opts && opts.preserveTextured);
     const isEraser = a => a.type === 'stroke' && a.tool === 'eraser';
+    const texOf = a => { const t = a.texture || a.tx; return (t && t !== 'smooth') ? t : null; };
     const eInfo = list.map(a => {
       if(!isEraser(a) || !a.points || !a.points.length) return null;
       let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
@@ -4827,7 +5111,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
         if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x;
         if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y;
       }
-      return { r: (a.width||1)/2, minX, minY, maxX, maxY };
+      return { r: (a.width||1)/2, minX, minY, maxX, maxY, tex: texOf(a) };
     });
     const dist2 = (px,py, ax,ay, bx,by) => {
       const dx=bx-ax, dy=by-ay, len2=dx*dx+dy*dy;
@@ -4842,6 +5126,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
         if(!isEraser(e) || keyOf(e) !== key) continue;
         const info = eInfo[j];
         if(!info) continue;
+        if(preserveTextured && info.tex) continue; // textured erasers are replayed, not baked
         const r = info.r;
         if(p.x < info.minX-r || p.x > info.maxX+r || p.y < info.minY-r || p.y > info.maxY+r) continue;
         const pts = e.points;
@@ -4860,14 +5145,49 @@ showLayerMenu(ev.clientX, ev.clientY, [
     const paintKeys = new Set();
     for(const a of list){ if(a.type === 'fill' || a.type === 'image') paintKeys.add(keyOf(a)); }
 
+    // Textured stroke bboxes per key (padded by full width: covers line
+    // half-width AND the spray scatter radius width*0.5). An eraser whose
+    // capsule overlaps one of these must be KEPT for replay.
+    const texBoxes = new Map();
+    if(preserveTextured){
+      for(const a of list){
+        if(a.type !== 'stroke' || isEraser(a) || !texOf(a) || !a.points || !a.points.length) continue;
+        let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+        for(const p of a.points){
+          if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x;
+          if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y;
+        }
+        const pad = a.width || 1;
+        const key = keyOf(a);
+        if(!texBoxes.has(key)) texBoxes.set(key, []);
+        texBoxes.get(key).push({ minX:minX-pad, minY:minY-pad, maxX:maxX+pad, maxY:maxY+pad });
+      }
+    }
+    const keepEraser = (info, key) => {
+      if(paintKeys.has(key)) return true;
+      if(!preserveTextured || !info) return false;
+      if(info.tex) return true; // partial (textured) erase can't be baked into geometry
+      const boxes = texBoxes.get(key);
+      if(!boxes) return false;
+      const r = info.r;
+      for(const b of boxes){
+        if(info.maxX + r >= b.minX && info.minX - r <= b.maxX &&
+           info.maxY + r >= b.minY && info.minY - r <= b.maxY) return true;
+      }
+      return false;
+    };
+
     const out = [];
     list.forEach((a, idx) => {
       const key = keyOf(a);
       if(isEraser(a)){
-        if(paintKeys.has(key)) out.push(a);
+        if(keepEraser(eInfo[idx], key)) out.push(a);
         return; // consumed by trimming
       }
       if(a.type !== 'stroke' || !a.points || !a.points.length){ out.push(a); return; }
+      // Textured strokes keep their FULL path: point-trimming shifts the
+      // seeded scatter/grain, and the kept erasers re-carve them on replay.
+      if(preserveTextured && texOf(a)){ out.push(a); return; }
       // Densify: recorded points can be sparse (long straight segments);
       // insert intermediate test points so an eraser crossing BETWEEN two
       // recorded points still splits the path there.
@@ -5454,9 +5774,15 @@ showLayerMenu(ev.clientX, ev.clientY, [
               && !only.has(a.layer)) return;
       const li = layerIndexOf(a);
       if(a.type==='stroke'){
+        // Erasers get a WIDER capture margin (their own paint radius):
+        // trimming a stroke's fringe puts the eraser CENTER outside the
+        // shrunken bbox, and margin-4 silently dropped it from the recipe
+        // — the trim then vanished on TO DRAWING. An over-captured eraser
+        // is harmless (destination-out over nothing is a no-op).
+        const m = a.tool === 'eraser' ? margin + (a.width || 1) : margin;
         const inside = a.points.some(p=>
-          p.x>=bbox.minX-margin && p.x<=bbox.minX+bbox.w+margin &&
-          p.y>=bbox.minY-margin && p.y<=bbox.minY+bbox.h+margin);
+          p.x>=bbox.minX-m && p.x<=bbox.minX+bbox.w+m &&
+          p.y>=bbox.minY-m && p.y<=bbox.minY+bbox.h+m);
         if(inside){
           const so = {
             type:'stroke', tool:a.tool, color:a.color, width:a.width, li,
@@ -5781,9 +6107,11 @@ showLayerMenu(ev.clientX, ev.clientY, [
         // FINAL-IMAGE geometry: fold the loaded erasers into the stroke
         // paths (split strokes into surviving segments, drop the erasers).
         // Textures applied later can then only ever touch visible lines.
+        // preserveTextured: erasers that trimmed textured (spray/pencil)
+        // strokes are kept and replayed — geometric trimming lost them.
         {
           const added = actions.splice(loadStart);
-          const baked = bakeErasers(added, a => a.layer);
+          const baked = bakeErasers(added, a => a.layer, { preserveTextured: true });
           baked.forEach(a => { a.id = ++actionCounter; });
           actions.push(...baked);
         }
@@ -6031,7 +6359,7 @@ showLayerMenu(ev.clientX, ev.clientY, [
         }
       }
       // 2) Fold erasers into the stroke geometry.
-      const bakedRecipe = bakeErasers(recolored, a => a.li || 0);
+      const bakedRecipe = bakeErasers(recolored, a => a.li || 0, { preserveTextured: true });
       // Carry the structural META through to the variation's recipe —
       // without it, saved variations collapsed into a single folder on load.
       const srcMeta = obj.recipe.find(a => a && a.type === 'meta');
