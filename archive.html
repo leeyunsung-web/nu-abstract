@@ -1459,7 +1459,12 @@
       } else if(a.type === 'fill'){
         const dc = ensure(li);
         if(a.m){
-          const mw = a.mw || W, mh = a.mh || H;
+          // Recipes omit mw/mh ONLY for masks recorded on the full studio
+          // canvas (1080²). Defaulting to the piece's own size wrapped the
+          // RLE rows and painted fills as horizontal color bands on
+          // bbox-cropped PNGs — the grid must default to 1080, exactly like
+          // the studio's own replay (a.mw || drawCanvas.width).
+          const mw = a.mw || 1080, mh = a.mh || 1080;
           paintSplitFill(dc, decodeMask(a.m, mw*mh), a.color, a.ox, a.oy, mw, mh);
         } else if(a.sli && a.sli.length){
           const sc = mkc(W,H), scx = sc.getContext('2d', { willReadFrequently:true });
