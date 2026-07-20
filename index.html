@@ -932,6 +932,8 @@
         <div class="comp-btns">
           <button class="btn btn-accent" id="genCompBtn">GENERATE RANDOM ✦</button>
           <button class="btn" id="clearCompBtn">CLEAR</button>
+          <button class="btn btn-ghost" id="openCompGalleryBtn" hidden
+                  title="Reopen a saved composition from the gallery for editing (master)">OPEN GALLERY</button>
           <button class="btn btn-ghost" id="downloadCompBtn">SAVE PNG</button>
         </div>
       </div>
@@ -1015,6 +1017,17 @@
     </div>
     <div class="modal-btns">
       <button class="btn btn-ghost" id="mgrClose">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="compGalleryModal">
+  <div class="modal" style="max-width:720px;">
+    <h2>GALLERY — SAVED COMPOSITIONS</h2>
+    <p class="hint">Compositions saved with embedded state can be reopened here, fully editable (master only).</p>
+    <div class="objects-grid" id="compGalleryGrid" style="max-height:60vh; overflow:auto;"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" id="compGalleryClose">CLOSE</button>
     </div>
   </div>
 </div>
@@ -3055,6 +3068,64 @@ showLayerMenu(ev.clientX, ev.clientY, [
     out.set(chunk, iendPos);
     out.set(buf.subarray(iendPos), iendPos + chunk.length);
     return new Blob([out], { type: 'image/png' });
+  }
+
+  // Generic variant: embeds ANY JSON object (ASCII-escaped, so Korean names
+  // survive the byte-level tEXt write) under the same keyword. Used for the
+  // COMPOSITION manifest.
+  async function embedJsonInPng(blob, obj){
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    const json = JSON.stringify(obj).replace(/[\u0080-\uffff]/g,
+      c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+    const kw = RECIPE_KEYWORD;
+    const textBytes = new Uint8Array(kw.length + 1 + json.length);
+    for(let i=0;i<kw.length;i++) textBytes[i] = kw.charCodeAt(i);
+    textBytes[kw.length] = 0;
+    for(let i=0;i<json.length;i++) textBytes[kw.length+1+i] = json.charCodeAt(i) & 0xFF;
+    const chunk = new Uint8Array(12 + textBytes.length);
+    const dv = new DataView(chunk.buffer);
+    dv.setUint32(0, textBytes.length);
+    chunk[4]=0x74; chunk[5]=0x45; chunk[6]=0x58; chunk[7]=0x74; // tEXt
+    chunk.set(textBytes, 8);
+    dv.setUint32(8 + textBytes.length, crc32(chunk, 4, 8 + textBytes.length));
+    const iendPos = buf.length - 12;
+    const out = new Uint8Array(buf.length + chunk.length);
+    out.set(buf.subarray(0, iendPos), 0);
+    out.set(chunk, iendPos);
+    out.set(buf.subarray(iendPos), iendPos + chunk.length);
+    return new Blob([out], { type: 'image/png' });
+  }
+
+  // Reads the embedded JSON and returns it ONLY if it is a composition
+  // manifest ({ nuComposition:1, items, objects }); plain recipes → null.
+  function extractCompositionFromPng(arrayBuffer){
+    try {
+      const b = new Uint8Array(arrayBuffer);
+      if(b.length < 8 || b[0]!==0x89 || b[1]!==0x50) return null;
+      const dv = new DataView(arrayBuffer);
+      let pos = 8;
+      while(pos + 12 <= b.length){
+        const len = dv.getUint32(pos);
+        const type = String.fromCharCode(b[pos+4],b[pos+5],b[pos+6],b[pos+7]);
+        if(type === 'tEXt'){
+          const data = b.subarray(pos+8, pos+8+len);
+          let z = -1;
+          for(let i=0;i<data.length;i++){ if(data[i]===0){ z=i; break; } }
+          if(z > 0){
+            let kw=''; for(let i=0;i<z;i++) kw += String.fromCharCode(data[i]);
+            if(kw === RECIPE_KEYWORD){
+              let txt=''; for(let i=z+1;i<data.length;i++) txt += String.fromCharCode(data[i]);
+              const parsed = JSON.parse(txt);
+              return (parsed && parsed.nuComposition === 1 && Array.isArray(parsed.items) &&
+                      Array.isArray(parsed.objects)) ? parsed : null;
+            }
+          }
+        }
+        if(type === 'IEND') break;
+        pos += 12 + len;
+      }
+    } catch(e){ console.warn('composition parse failed', e); }
+    return null;
   }
   function extractRecipeFromPng(arrayBuffer){
     try {
@@ -7700,7 +7771,11 @@ showLayerMenu(ev.clientX, ev.clientY, [
     renderComposition();
     toast('Saving to gallery…');
     try {
-      const blob = await new Promise(r => compCanvas.toBlob(r, 'image/png'));
+      let blob = await new Promise(r => compCanvas.toBlob(r, 'image/png'));
+      // Embed the FULL composition state (placements + each sample's vector
+      // recipe and pixels) so the gallery file can be reopened for editing.
+      try { blob = await embedJsonInPng(blob, buildCompositionManifest()); }
+      catch(e){ console.warn('composition manifest embed failed', e); }
       const base64 = await blobToBase64(blob);
       const filename = `comp-${new Date().toISOString().replace(/[:.]/g,'-')}.png`;
       const { owner, repo, branch, token } = ghConfig;
@@ -7725,6 +7800,132 @@ showLayerMenu(ev.clientX, ev.clientY, [
       toast('Gallery save failed: ' + (err.message || err));
     }
   }
+  // ==================== COMPOSITION MANIFEST (round-trip editing) ====================
+  // Everything needed to rebuild the composition: bg, each placement
+  // (position/scale/angle/z-order = array order), and every referenced
+  // sample once (pixels as dataURL + vector recipe + archive identity).
+  function buildCompositionManifest(){
+    const uniq = [];
+    const idxOf = new Map();
+    for(const it of placedItems){
+      if(idxOf.has(it.obj)) continue;
+      idxOf.set(it.obj, uniq.length);
+      const o = it.obj;
+      uniq.push({
+        w: o.w, h: o.h,
+        filename: o.filename || null,
+        ghPath: o.ghPath || null,
+        downloadUrl: o.downloadUrl || null,
+        recipe: (o.recipe && o.recipe.length) ? o.recipe : null,
+        png: o.canvas.toDataURL('image/png')
+      });
+    }
+    return {
+      nuComposition: 1,
+      bg: compBg,
+      objects: uniq,
+      items: placedItems.map(it => ({
+        o: idxOf.get(it.obj), x: it.x, y: it.y,
+        scale: it.scale, angle: it.angle || 0, r: it.r
+      }))
+    };
+  }
+
+  async function loadCompositionManifest(man){
+    const objs = [];
+    for(const so of man.objects){
+      // Reuse an already-loaded sample with the same filename; otherwise
+      // register the embedded copy so it's editable (TO DRAWING / ⤓ SAVE).
+      let obj = so.filename ? objects.find(o => o.filename === so.filename) : null;
+      if(!obj){
+        const img = new Image();
+        await new Promise((res, rej)=>{ img.onload = res; img.onerror = ()=>rej(new Error('embedded image decode failed')); img.src = so.png; });
+        const c = document.createElement('canvas');
+        c.width = so.w; c.height = so.h;
+        c.getContext('2d').drawImage(img, 0, 0, so.w, so.h);
+        obj = addObject(c, so.recipe || null, so.filename || null, so.downloadUrl || null);
+        if(so.ghPath) obj.ghPath = so.ghPath;
+      }
+      objs.push(obj);
+    }
+    placedItems.length = 0;
+    for(const it of man.items){
+      const obj = objs[it.o];
+      if(!obj) continue;
+      placedItems.push({ obj, x: it.x, y: it.y, scale: it.scale, angle: it.angle || 0, r: it.r });
+    }
+    if(man.bg){
+      compBg = man.bg;
+      const cbg = $('customBg'); if(cbg) cbg.value = compBg;
+      document.querySelectorAll('#bgSwatches .swatch').forEach(s=>s.classList.remove('active'));
+    }
+    selectedItemIdx = null;
+    $('compItemEditor').hidden = true;
+    renderComposition();
+  }
+
+  // ---- Gallery browser (master): list compositions/ and load one back ----
+  async function openCompGallery(){
+    if(userRole !== 'master'){ toast('Master access required.'); return; }
+    if(!ghConfig || !ghConfig.token){ toast('Connect GitHub first.'); return; }
+    const modal = $('compGalleryModal');
+    const grid = $('compGalleryGrid');
+    modal.classList.add('show');
+    grid.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+      const { owner, repo, branch, token } = ghConfig;
+      const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/compositions?ref=${encodeURIComponent(branch||'main')}&t=${Date.now()}`, {
+        headers: { 'Accept': 'application/vnd.github+json', 'Authorization': `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' },
+        cache: 'no-store'
+      });
+      if(res.status === 404){ grid.innerHTML = '<p class="empty-hint">No compositions saved yet.</p>'; return; }
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const items = (await res.json()).filter(i => i.type === 'file' && /\.png$/i.test(i.name))
+        .sort((a,b)=> b.name.localeCompare(a.name)); // newest first (timestamped names)
+      if(!items.length){ grid.innerHTML = '<p class="empty-hint">No compositions saved yet.</p>'; return; }
+      grid.innerHTML = '';
+      for(const f of items){
+        const card = document.createElement('div');
+        card.className = 'obj-card';
+        card.innerHTML = `<div class="obj-thumb"><img src="${withArchiveVer(f.download_url)}" loading="lazy"
+            style="width:100%; height:100%; object-fit:contain;"></div>
+          <div class="obj-meta"><span style="overflow:hidden; text-overflow:ellipsis;">${escMgr(f.name)}</span></div>`;
+        const row = document.createElement('div');
+        row.className = 'obj-actions';
+        const openBtn = document.createElement('button');
+        openBtn.className = 'btn btn-sm btn-accent btn-full';
+        openBtn.textContent = '→ COMPOSITION';
+        openBtn.title = 'Reopen this composition for editing (placements, sizes, layers)';
+        openBtn.addEventListener('click', async ()=>{
+          openBtn.disabled = true;
+          toast('Opening composition…');
+          try {
+            const r2 = await fetch(withArchiveVer(f.download_url), { cache:'no-store' });
+            if(!r2.ok) throw new Error('HTTP ' + r2.status);
+            const man = extractCompositionFromPng(await r2.arrayBuffer());
+            if(!man){ toast('This file has no composition data (saved before this feature).'); openBtn.disabled = false; return; }
+            await loadCompositionManifest(man);
+            modal.classList.remove('show');
+            toast(`Composition restored (${man.items.length} item${man.items.length===1?'':'s'}) — fully editable.`);
+          } catch(e){
+            console.error(e);
+            toast('Open failed: ' + (e.message || e));
+            openBtn.disabled = false;
+          }
+        });
+        row.appendChild(openBtn);
+        card.appendChild(row);
+        grid.appendChild(card);
+      }
+    } catch(e){
+      console.error(e);
+      grid.innerHTML = `<p class="empty-hint">Failed to list: ${escMgr(e.message || String(e))}</p>`;
+    }
+  }
+  $('openCompGalleryBtn').addEventListener('click', openCompGallery);
+  $('compGalleryClose').addEventListener('click', ()=> $('compGalleryModal').classList.remove('show'));
+  $('compGalleryModal').addEventListener('click', e=>{ if(e.target === $('compGalleryModal')) $('compGalleryModal').classList.remove('show'); });
+
   function downloadCompositionLocally(){
     selectedItemIdx = null;
     renderComposition();
@@ -7740,11 +7941,14 @@ showLayerMenu(ev.clientX, ev.clientY, [
     if(!b) return;
     if(userRole === 'master'){
       b.textContent = 'SAVE TO GALLERY';
-      b.title = 'Upload the full-size PNG to the shared GALLERY page';
+      b.title = 'Upload the full-size PNG (with embedded composition state) to the shared GALLERY page';
     } else {
       b.textContent = 'SAVE PNG';
       b.title = 'Download the full-size PNG to your device';
     }
+    // OPEN GALLERY (reopen saved compositions for editing) — master only.
+    const og = $('openCompGalleryBtn');
+    if(og) og.hidden = userRole !== 'master';
   }
   $('downloadCompBtn').addEventListener('click', ()=>{
     if(userRole === 'master') saveCompositionToGallery();
