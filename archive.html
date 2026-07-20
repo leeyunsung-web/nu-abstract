@@ -286,7 +286,17 @@
   "use strict";
 
   const $ = id => document.getElementById(id);
-  const GH_STORAGE_KEY = 'objet_studio_gh_config';       
+  const GH_STORAGE_KEY = 'objet_studio_gh_config';
+  // Shared with the studio: bumped on every archive write/delete. Appending
+  // ?v=<token> to raw URLs busts both the browser cache and the raw CDN, so
+  // ⤓ SAVE overwrites appear here immediately.
+  const ARCHIVE_VER_KEY = 'nulayer_archive_ver';
+  function archiveVer(){ try { return localStorage.getItem(ARCHIVE_VER_KEY) || ''; } catch(e){ return ''; } }
+  function withArchiveVer(url){
+    const v = archiveVer();
+    if(!v || !url) return url;
+    return url + (url.includes('?') ? '&' : '?') + 'v=' + v;
+  }       
   const ARCHIVE_STORAGE_KEY = 'objet_studio_archive_cfg'; 
   const BG_STORAGE_KEY = 'objet_studio_archive_bg';       
 
@@ -490,14 +500,14 @@
       // (GitHub raw/API URLs serve CORS headers). If it fails we retry
       // without it and fall back to box hits for that item.
       im.crossOrigin = 'anonymous';
-      im.src = img.downloadUrl;
+      im.src = withArchiveVer(img.downloadUrl);
       im.loading = 'lazy';
       im.addEventListener('load', ()=>{
         buildHitMap(obj, im);
-        applyNaturalSize(obj, im);
+        if(!obj._sized){ obj._sized = true; applyNaturalSize(obj, im); }
       });
       im.addEventListener('error', ()=>{
-        if(im.crossOrigin !== null){ im.crossOrigin = null; im.src = img.downloadUrl; }
+        if(im.crossOrigin !== null){ im.crossOrigin = null; im.src = withArchiveVer(img.downloadUrl); }
       }, { once:true });
       obj.imEl = im;
       el.appendChild(im);
@@ -809,6 +819,14 @@
     applyPaperArchive();
   });
   window.addEventListener('storage', ev=>{ if(ev.key === PAPER_KEY) applyPaperArchive(); });
+  // The studio bumped the archive version (SAVE overwrite / delete) →
+  // reload every collage image in place, keeping the current layout.
+  window.addEventListener('storage', ev=>{
+    if(ev.key !== ARCHIVE_VER_KEY) return;
+    for(const o of itemsData){
+      if(o.imEl && o.url) o.imEl.src = withArchiveVer(o.url);
+    }
+  });
   applyPaperArchive();
 
   // Close menu if clicked on background
@@ -1581,7 +1599,7 @@
         // the browser serves this from cache in most cases).
         let buf = null;
         try {
-          const res = await fetch(obj.url, { cache:'force-cache' });
+          const res = await fetch(withArchiveVer(obj.url), { cache:'force-cache' });
           if(!res.ok) throw new Error('HTTP ' + res.status);
           buf = await res.arrayBuffer();
         } catch(e){ skipped++; continue; }
