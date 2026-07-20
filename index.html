@@ -5205,6 +5205,9 @@ showLayerMenu(ev.clientX, ev.clientY, [
       brushSize = toolSizes[currentTool === 'eraser' ? 'eraser' : 'brush'];
       $('brushSize').value = brushSize;
       $('brushSizeVal').textContent = brushSize;
+      // TEXTURE/GRAIN swap too — eraser inherits the stroke's texture until
+      // it's adjusted while the eraser is active (then it stays independent).
+      syncTexUIForTool();
       $('toleranceRow').style.opacity = (currentTool === 'fill') ? '1' : '0.4';
       updateBrushPreview();
       clearStrokeSelection();
@@ -5244,8 +5247,29 @@ showLayerMenu(ev.clientX, ev.clientY, [
   });
 
   // ==================== STROKE TEXTURES ====================
+  // Per-tool texture memory (mirrors toolSizes): the ERASER follows the
+  // STROKE's texture/grain exactly ("as selected for strokes") until the
+  // user adjusts TEXTURE or GRAIN while the eraser is active — from then
+  // on the eraser keeps its own independent settings, just like SIZE.
   let currentTexture = 'smooth';
   let currentGrain = 50;
+  const brushTex  = { tex: 'smooth', grain: 50 };
+  const eraserTex = { tex: 'smooth', grain: 50, customized: false };
+  function texStateForActiveTool(){
+    if(currentTool === 'eraser') return eraserTex.customized ? eraserTex : brushTex;
+    return brushTex;
+  }
+  // Swap the TEXTURE buttons + GRAIN slider to the active tool's values.
+  function syncTexUIForTool(){
+    const s = texStateForActiveTool();
+    currentTexture = s.tex;
+    currentGrain = s.grain;
+    document.querySelectorAll('.tex-btn').forEach(b=>b.classList.toggle('active', b.dataset.tex === currentTexture));
+    $('grain').value = currentGrain;
+    $('grainVal').textContent = currentGrain;
+    const lbl = document.querySelector('.tex-label');
+    if(lbl) lbl.textContent = currentTool === 'eraser' ? 'TEXTURE · ERASER' : 'TEXTURE';
+  }
   let liveTexApply = false;
   let texApplyTimer = null;
 
@@ -5282,12 +5306,27 @@ showLayerMenu(ev.clientX, ev.clientY, [
       document.querySelectorAll('.tex-btn').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       currentTexture = btn.dataset.tex;
+      if(currentTool === 'eraser'){
+        // First eraser-side adjustment: fork from the stroke's settings.
+        if(!eraserTex.customized) eraserTex.grain = currentGrain;
+        eraserTex.customized = true;
+        eraserTex.tex = currentTexture;
+      } else {
+        brushTex.tex = currentTexture;
+      }
       if(liveTexApply) retextureActiveLayer();
     });
   });
   $('grain').addEventListener('input', e=>{
     currentGrain = parseInt(e.target.value, 10);
     $('grainVal').textContent = currentGrain;
+    if(currentTool === 'eraser'){
+      if(!eraserTex.customized) eraserTex.tex = currentTexture;
+      eraserTex.customized = true;
+      eraserTex.grain = currentGrain;
+    } else {
+      brushTex.grain = currentGrain;
+    }
     if(liveTexApply) retextureActiveLayer();
   });
   $('liveTexBtn').addEventListener('click', ()=>{
